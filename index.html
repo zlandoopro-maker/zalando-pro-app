@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Viewport: covers notch, disables double-tap zoom -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="google" content="notranslate" />
+
+    <!-- PWA & App Shell -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Zalando Pro" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Icons -->
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/logo.png" />
+    <link rel="shortcut icon" href="/logo.png" />
+
+    <!-- Google Fonts Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
+
+    <!-- Theme Color: Dynamically handled, but provides a solid default -->
+    <meta name="theme-color" content="#4A69BD" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0B0C10" media="(prefers-color-scheme: dark)" />
+
+    <!-- SEO & Social -->
+    <meta name="description" content="Zalando Pro - Professional data platform for partners. Earn daily rewards, track commissions, and grow your team." />
+    <meta property="og:title" content="Zalando Pro Data Platform" />
+    <meta property="og:description" content="Professional partner earnings platform." />
+    <meta property="og:type" content="website" />
+
+    <title>Zalando Pro Data Platform</title>
+    <style>
+        /* Hide google translate toolbars and banner */
+        body { top: 0px !important; position: static !important; }
+        .goog-te-banner-frame.skiptranslate { display: none !important; }
+        .skiptranslate.goog-te-gadget { color: transparent !important; }
+        .skiptranslate.goog-te-gadget > span { display: none !important; }
+        #google_translate_element { position: absolute; left: -9999px; top: -9999px; width: 0; height: 0; overflow: hidden; opacity: 0; pointer-events: none; }
+        #goog-gt-tt { display: none !important; }
+        .goog-text-highlight { background-color: transparent !important; box-shadow: none !important; }
+
+        /* ===== Cross-Browser Mobile Fixes (Android + iOS) ===== */
+        *, *::before, *::after { box-sizing: border-box; }
+        
+        /* Prevent elastic overscroll and fix height */
+        html, body { 
+          overscroll-behavior: none; 
+          height: 100%; 
+          margin: 0;
+          padding: 0;
+          background: #FFFFFF; /* Fully white background */
+        }
+
+        /* Disable long-press callout and tap highlight */
+        * { 
+          -webkit-touch-callout: none; 
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Prevent text selection on interactive elements */
+        button, a, [role="button"], .no-select { 
+          -webkit-user-select: none; 
+          user-select: none; 
+        }
+
+        /* Ensure inputs are 16px+ to prevent auto-zoom */
+        input, textarea, select { 
+          font-size: 16px !important; 
+          -webkit-appearance: none; 
+          appearance: none; 
+        }
+
+        /* Root Container: Handles Safe Areas (Notches/Home Bars) */
+        #root { 
+          display: flex;
+          flex-direction: column;
+          min-height: 100vh;
+          min-height: 100dvh;
+          /* Critical: Ensure padding-top for Android Notches */
+          padding-top: env(safe-area-inset-top, 24px); 
+          padding-bottom: env(safe-area-inset-bottom, 0px);
+          padding-left: env(safe-area-inset-left, 0px);
+          padding-right: env(safe-area-inset-right, 0px);
+          background: #FFFFFF;
+        }
+
+        /* Dark mode root background */
+        @media (prefers-color-scheme: dark) {
+          #root { background: #0B0C10; }
+        }
+
+        /* Smooth font rendering */
+        body { 
+          -webkit-font-smoothing: antialiased; 
+          -moz-osx-font-smoothing: grayscale; 
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        /* Remove default button styling */
+        button { 
+          -webkit-appearance: none; 
+          appearance: none; 
+          background: none; 
+          border: none; 
+          cursor: pointer;
+        }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;background:#f9fafb;">
+        <div style="width:40px;height:40px;border:4px solid #eee;border-top:4px solid #2563eb;border-radius:50%;animation:spin 1s linear infinite;"></div>
+        <div style="margin-top:16px;color:#6b7280;">Loading Zalando Pro...</div>
+      </div>
+      <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

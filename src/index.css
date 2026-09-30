@@ -1,0 +1,251 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,700;1,800;1,900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-primary: #4A69BD;
+  --color-primary-dark: #3b5496;
+  --color-accent: #fbbf24;
+  --color-zalando-blue: #4A69BD;
+  --safe-top: env(safe-area-inset-top, 24px); /* Fallback for Android notches */
+}
+
+@layer base {
+  html {
+    /* Prevent content jumping when keyboard opens */
+    height: 100%;
+    height: -webkit-fill-available;
+  }
+
+  body {
+    @apply font-sans bg-[#F8FAFF] text-slate-900 transition-colors duration-300 antialiased;
+    /* Smooth scrolling everywhere */
+    scroll-behavior: smooth;
+    /* Hardware acceleration for all animations */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Prevent elastic overscroll on iOS */
+    overscroll-behavior: none;
+    /* Prevent pull-to-refresh */
+    overscroll-behavior-y: none;
+    /* Better tap response */
+    touch-action: manipulation;
+    /* Use fill-available for perfect mobile height */
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+  }
+
+  button {
+    @apply transition-all duration-200 cursor-pointer;
+    /* Immediate tap, no 300ms delay */
+    touch-action: manipulation;
+  }
+
+  input, textarea, select {
+    /* Prevents iOS auto-zoom when font < 16px */
+    font-size: 16px;
+    /* Smooth out iOS input borders */
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  /* Momentum scrolling for all overflow-y-auto / overflow-y-scroll containers */
+  .overflow-y-auto,
+  .overflow-y-scroll,
+  [class*="overflow-y"] {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+
+  /* Hardware accelerate all animated elements */
+  [class*="animate-"],
+  [class*="transition-"] {
+    will-change: transform, opacity;
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+  }
+}
+
+@custom-variant dark (&:is(.dark *));
+
+/* ===== Safe Area Insets (Notch / Dynamic Island support) ===== */
+.safe-top {
+  padding-top: max(env(safe-area-inset-top, 0px), 36px) !important;
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.safe-left {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+.safe-right {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Bottom nav clears the safe area on notched phones */
+.nav-safe-bottom {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+  height: calc(5rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* ===== Scroll Containers ===== */
+.scroll-container {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  /* Hide scrollbar visually but keep it functional */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scroll-container::-webkit-scrollbar {
+  display: none;
+}
+
+/* ===== Global Utility Classes ===== */
+.bg-gradient-zalando {
+  background: linear-gradient(180deg, #4A69BD 0%, #3b5496 100%);
+}
+
+.glass {
+  @apply bg-white/70 dark:bg-[#15171B]/70 backdrop-blur-md border border-white/20 dark:border-white/5;
+}
+
+.glass-dark {
+  @apply bg-black/30 backdrop-blur-xl border border-white/10;
+}
+
+.soft-shadow {
+  box-shadow: 0 8px 30px rgb(0,0,0,0.04);
+}
+
+.bg-intro {
+  background: #4A69BD;
+}
+
+/* ===== Active Press States (Mobile feel) ===== */
+.tap-scale {
+  @apply active:scale-[0.97] transition-transform duration-150;
+}
+
+/* Android Ripple-like effect for specific containers */
+.ripple-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.ripple-container::after {
+  content: "";
+  display: block;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle, #fff 10%, transparent 10.01%);
+  background-repeat: no-repeat;
+  background-position: 50%;
+  transform: scale(10, 10);
+  opacity: 0;
+  transition: transform 0.5s, opacity 1s;
+}
+
+.ripple-container:active::after {
+  transform: scale(0, 0);
+  opacity: 0.3;
+  transition: 0s;
+}
+
+/* ===== Text Truncation Utilities ===== */
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ===== Keyboard-Aware Padding ===== */
+/* Adds bottom padding when software keyboard is open */
+@supports (height: 100dvh) {
+  .min-h-screen {
+    min-height: 100dvh;
+  }
+  .h-screen {
+    height: 100dvh;
+  }
+}
+
+/* ===== Gold & Diamond Shimmer Animation for Regional General Manager ===== */
+@keyframes shimmer-sweep {
+  0% {
+    transform: translateX(-150%) skewX(-20deg);
+  }
+  45%, 100% {
+    transform: translateX(300%) skewX(-20deg);
+  }
+}
+
+@keyframes gold-glow-pulse {
+  0%, 100% {
+    border-color: rgba(251, 191, 36, 0.7);
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.35), inset 0 0 12px rgba(251, 191, 36, 0.2);
+  }
+  50% {
+    border-color: rgba(254, 240, 138, 1);
+    box-shadow: 0 0 35px rgba(250, 204, 21, 0.7), inset 0 0 25px rgba(250, 204, 21, 0.35);
+  }
+}
+
+@keyframes crown-sparkle {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+    filter: drop-shadow(0 0 6px rgba(250, 204, 21, 0.8));
+  }
+  50% {
+    transform: scale(1.08) rotate(3deg);
+    filter: drop-shadow(0 0 16px rgba(255, 230, 0, 1));
+  }
+}
+
+.animate-shimmer-sweep {
+  animation: shimmer-sweep 2.8s infinite ease-in-out;
+}
+
+.animate-gold-glow-pulse {
+  animation: gold-glow-pulse 2.2s infinite ease-in-out;
+}
+
+@keyframes diamond-glow-pulse {
+  0%, 100% {
+    border-color: rgba(139, 92, 246, 0.7);
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.45), inset 0 0 12px rgba(167, 139, 250, 0.3);
+  }
+  50% {
+    border-color: rgba(196, 181, 253, 1);
+    box-shadow: 0 0 40px rgba(139, 92, 246, 0.85), inset 0 0 25px rgba(196, 181, 253, 0.5);
+  }
+}
+
+@keyframes diamond-sparkle {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+    filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.8)) drop-shadow(0 0 3px rgba(196, 181, 253, 0.6));
+  }
+  50% {
+    transform: scale(1.1) rotate(3deg);
+    filter: drop-shadow(0 0 22px rgba(139, 92, 246, 1)) drop-shadow(0 0 8px rgba(233, 213, 255, 0.9));
+  }
+}
+
+.animate-diamond-glow-pulse {
+  animation: diamond-glow-pulse 2.2s infinite ease-in-out;
+}
+
+.animate-diamond-sparkle {
+  animation: diamond-sparkle 2s infinite ease-in-out;
+}
+
+.animate-crown-sparkle {
+  animation: crown-sparkle 2s infinite ease-in-out;
+}
+
+

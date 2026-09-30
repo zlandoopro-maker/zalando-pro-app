@@ -1,0 +1,133 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // --- Path Helpers ---
+    function userPath(uid) { return /databases/$(database)/documents/users/$(uid); }
+
+    // --- Entity Validation Helpers ---
+    
+    function isValidUser(data) {
+      // Identity Integrity: userId field MUST match request.auth.uid
+      return data.keys().hasAll(['userId', 'email', 'balance', 'createdAt']) &&
+             data.keys().size() <= 20 &&
+             data.userId == request.auth.uid &&
+             data.email is string && data.email.size() <= 128 &&
+             data.balance is number && data.balance >= 0 &&
+             data.createdAt is string && data.createdAt.size() <= 64;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['userId', 'type', 'amount', 'status', 'timestamp']) &&
+             data.userId == request.auth.uid &&
+             data.type in ['deposit', 'withdrawal', 'commission', 'task_reward'] &&
+             data.amount is number && 
+             data.status in ['pending', 'completed', 'failed'] &&
+             data.timestamp is string && data.timestamp.size() <= 64;
+    }
+
+    function isValidReferral(data) {
+      return data.keys().hasAll(['referrerId', 'inviteeId', 'inviteeName', 'timestamp']) &&
+             data.referrerId is string && data.referrerId.size() <= 128 &&
+             data.inviteeId is string && data.inviteeId.size() <= 128 &&
+             data.inviteeName is string && data.inviteeName.size() <= 64 &&
+             data.timestamp is string && data.timestamp.size() <= 64;
+    }
+
+    // --- Match Blocks ---
+
+    match /users/{userId} {
+      allow get: if (isOwner(userId) || isAdmin()) && isValidId(userId);
+      allow list: if isAdmin();
+      
+      allow create: if isOwner(userId) && isValidId(userId) &&
+                    isValidUser(incoming()) && 
+                    incoming().isAdmin == false &&
+                    incoming().balance == 0;
+      
+      allow update: if isEmailVerified() && isValidId(userId) && (
+        (isOwner(userId) && (
+          // Action: Update Profile Info
+          (incoming().diff(existing()).affectedKeys().hasOnly(['displayName']) && incoming().displayName is string && incoming().displayName.size() <= 50) ||
+          // Action: App Logic State (usually updated via client in this demo architecture)
+          (incoming().diff(existing()).affectedKeys().hasOnly([
+            'balance', 'totalEarnings', 'todayTaskEarnings', 'todayTeamEarnings', 
+            'currentPlan', 'planExpiry', 'tasksCompletedCount', 'lastTaskDate',
+            'withdrawalLockUntil', 'lastWithdrawalDate', 'completedDaysCount',
+            'updatedAt'
+          ]) && !existing().isAdmin && incoming().userId == existing().userId && incoming().email == existing().email)
+        )) || isAdmin()
+      );
+    }
+
+    match /plans/{planId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidId(planId);
+    }
+
+    match /transactions/{txId} {
+      allow get: if isSignedIn() && isValidId(txId) && (existing().userId == request.auth.uid || isAdmin());
+      // Secure List Query: Enforcing boundary
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      
+      allow create: if isEmailVerified() && isValidId(txId) &&
+                    isValidTransaction(incoming()) && 
+                    incoming().status == 'pending';
+      
+      // Tiered Identity: Only admin can settle transactions
+      allow update: if isAdmin() && isValidId(txId) && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['status']) &&
+                    incoming().status in ['completed', 'failed'];
+    }
+
+    match /referrals/{referralId} {
+      allow get: if isSignedIn() && isValidId(referralId) && (existing().referrerId == request.auth.uid || existing().inviteeId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.referrerId == request.auth.uid || resource.data.inviteeId == request.auth.uid || isAdmin());
+      
+      allow create: if isEmailVerified() && isValidId(referralId) && 
+                    isValidReferral(incoming()) &&
+                    incoming().inviteeId == request.auth.uid;
+      
+      allow update: if (isAdmin() || (isOwner(incoming().referrerId) && incoming().diff(existing()).affectedKeys().hasOnly(['planType']))) && isValidId(referralId);
+    }
+
+    match /admins/{userId} {
+      allow read: if isOwner(userId);
+    }
+  }
+}

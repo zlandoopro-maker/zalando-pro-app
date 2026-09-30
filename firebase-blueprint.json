@@ -1,0 +1,110 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User account details, balance, and investment status.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "phone": { "type": "string" },
+        "dob": { "type": "string" },
+        "kycCompleted": { "type": "boolean" },
+        "referralCode": { "type": "string" },
+        "referredBy": { "type": "string" },
+        "balance": { "type": "number" },
+        "totalEarnings": { "type": "number" },
+        "todayTaskEarnings": { "type": "number" },
+        "todayTeamEarnings": { "type": "number" },
+        "currentPlan": { "type": "string" },
+        "planExpiry": { "type": "string", "format": "date-time" },
+        "tasksCompletedCount": { "type": "integer" },
+        "lastTaskDate": { "type": "string", "format": "date-time" },
+        "withdrawalLockUntil": { "type": "string", "format": "date-time" },
+        "lastWithdrawalDate": { "type": "string", "format": "date-time" },
+        "isAdmin": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "email", "balance"]
+    },
+    "Plan": {
+      "title": "Investment Plan",
+      "description": "Details of an investment plan available for purchase.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "validityDays": { "type": "integer" },
+        "dailyTasks": { "type": "integer" },
+        "dailyReward": { "type": "number" }
+      }
+    },
+    "Transaction": {
+      "title": "Transaction Log",
+      "description": "Records of deposits, withdrawals, and commissions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["deposit", "withdrawal", "commission", "task_reward"] },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "completed", "failed"] },
+        "txid": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      }
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Individual user profiles and stats."
+    },
+    "plans/{planId}": {
+      "schema": "Plan",
+      "description": "Global investment plans."
+    },
+    "transactions/{txId}": {
+      "schema": "Transaction",
+      "description": "All platform transactions."
+    },
+    "referral_codes/{code}": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "userId": { "type": "string" }
+        }
+      },
+      "description": "Maps short referral code to userId"
+    },
+    "referrals/{referralId}": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "referrerId": { "type": "string" },
+          "inviteeId": { "type": "string" },
+          "inviteeName": { "type": "string" },
+          "planType": { "type": "string" },
+          "commissionEarned": { "type": "number" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      },
+      "description": "Referral mapping for commissions and downline tracking."
+    },
+    "settings/{settingId}": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "announcement": { "type": "string" },
+          "bannerUrl": { "type": "string" },
+          "telegramLink": { "type": "string" },
+          "instagramLink": { "type": "string" },
+          "youtubeLink": { "type": "string" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "description": "Global application settings and announcements."
+    }
+  }
+}

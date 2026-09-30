@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "595716331187",
+    "firebase_url": "https://gen-lang-client-0938093014-default-rtdb.firebaseio.com",
+    "project_id": "gen-lang-client-0938093014",
+    "storage_bucket": "gen-lang-client-0938093014.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:595716331187:android:9e4e74bd1dd3198573c2c6",
+        "android_client_info": {
+          "package_name": "com.zalando.pro"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "595716331187-eep8bftj6bjnai6rdoifj4mrnoh3g2oj.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.zalando.pro",
+            "certificate_hash": "f947ba8cf99ef00026c756badea120b8b8dde4cc"
+          }
+        },
+        {
+          "client_id": "595716331187-rvt1mpgc8bgsh636u53jje41ccg7n6u5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBEC6_xZetcC-PK5WOm86cpBprcTktz4q8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "595716331187-7jmaacasb7i1a8995rh74k5pnnivnplc.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

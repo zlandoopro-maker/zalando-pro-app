@@ -1,0 +1,14 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.zalando.pro",
+      "sha256_cert_fingerprints": [
+        "// TODO: Replace this with your actual Android Release SHA256 certificate fingerprint",
+        "// You can find it in Android Studio (Gradle -> Tasks -> android -> signingReport) or from the Play Console",
+        "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00"
+      ]
+    }
+  }
+]
