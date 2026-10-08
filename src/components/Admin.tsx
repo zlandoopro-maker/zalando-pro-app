@@ -839,7 +839,7 @@ export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void,
                         if (!title || !body) return;
 
                         try {
-                          const baseUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000' : '');
+                          const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
                           const res = await fetch(`${baseUrl}/api/admin/broadcast`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },

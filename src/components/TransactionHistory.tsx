@@ -32,7 +32,7 @@ export default function TransactionHistory({ onBack }: TransactionHistoryProps) 
     if (pendingNowPayments.length === 0) return;
 
     let mounted = true;
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
 
     const checkStatuses = async () => {
       for (const record of pendingNowPayments) {

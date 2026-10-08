@@ -116,7 +116,7 @@ export async function scheduleDailyTaskReminder() {
  */
 export async function notifyAdminOfRequest(type: 'deposit' | 'withdrawal', amount: number) {
   try {
-    const baseUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000' : '');
+    const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
     const response = await fetch(`${baseUrl}/api/admin/notify-request`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
