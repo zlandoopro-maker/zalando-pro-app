@@ -408,16 +408,20 @@ export default function DailyTasks({ onBack }: DailyTasksProps) {
   const handleSubmit = async () => {
     // ── Duplicate-tap guard: bail immediately if already processing ──
     if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     
     // Check clock integrity to prevent time manipulation (cheating daily resets)
     const isClockOk = await verifyClockIntegrity(showNotification);
     if (!isClockOk) {
       setFlowState('idle');
+      isSubmittingRef.current = false;
       return;
     }
 
-    isSubmittingRef.current = true;
-    if (!auth.currentUser || !profile) return;
+    if (!auth.currentUser || !profile) {
+      isSubmittingRef.current = false;
+      return;
+    }
     const tasksCompleted = profile.tasksCompletedCount ?? 0;
     if (tasksCompleted >= userTaskLimit) {
       showNotification('Daily task limit reached!', { type: 'error' });

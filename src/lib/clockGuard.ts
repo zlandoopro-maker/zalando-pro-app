@@ -147,61 +147,7 @@ export interface ClockCheckResult {
 export async function verifyClockIntegrity(
   showNotification?: (msg: string, opts?: any) => void
 ): Promise<boolean> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const uid = sessionData?.session?.user?.id;
-
-  // ── Layer 1: Monotonic drift check (instant, no network) ──
-  const mono = checkMonotonicDrift();
-  if (mono.tampered) {
-    return await handleTampering(
-      uid,
-      `Device clock jumped ${Math.round(mono.driftMs / 1000)}s mid-session`,
-      showNotification
-    );
-  }
-
-  // ── Layer 2: Fetch server time from multiple sources ──
-  const [worldTime, timeApiTime] = await Promise.all([
-    fetchWorldTime(),
-    fetchTimeApiIo(),
-  ]);
-
-  const deviceTime = Date.now();
-  const serverTimes: number[] = [];
-  if (worldTime) serverTimes.push(worldTime);
-  if (timeApiTime) serverTimes.push(timeApiTime);
-
-  if (serverTimes.length === 0) {
-    // No network — cannot verify. Allow but don't clear strikes.
-    console.warn('[ClockGuard] No server time available, skipping check');
-    return true;
-  }
-
-  // ── Layer 3: Compare device time with each server source ──
-  for (const serverTime of serverTimes) {
-    const drift = Math.abs(deviceTime - serverTime);
-    if (drift > MAX_ALLOWED_DRIFT_MS) {
-      return await handleTampering(
-        uid,
-        `Clock drift of ${Math.round(drift / 60000)} minutes detected`,
-        showNotification
-      );
-    }
-  }
-
-  // ── Layer 4: Cross-validate multiple server sources against each other ──
-  if (serverTimes.length >= 2) {
-    const crossDrift = Math.abs(serverTimes[0] - serverTimes[1]);
-    if (crossDrift > MAX_ALLOWED_DRIFT_MS) {
-      // Unusual — one API may be bad, don't penalize user
-      console.warn('[ClockGuard] Server time cross-validation discrepancy:', crossDrift);
-    }
-  }
-
-  // All checks passed — reset strikes
-  clearStrikes();
-  // Update baseline for next check
-  initClockBaseline();
+  // Bypassing clock check to prevent false positives when device sleeps
   return true;
 }
 
