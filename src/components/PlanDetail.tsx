@@ -100,12 +100,13 @@ export default function PlanDetail({ planId, onBack, onDeposit }: PlanDetailProp
           }
 
           // --- CHECKS ---
-          if (userData.balance < plan.price) throw new Error("Insufficient balance");
+          const currentBalance = Number(userData.balance) || 0;
+          if (currentBalance < plan.price) throw new Error("Insufficient balance");
 
           // --- WRITES ---
           // 1. Update User
           transaction.update(userRef, {
-            balance: userData.balance - plan.price,
+            balance: currentBalance - plan.price,
             currentPlan: plan.id,
             planPurchaseDate: new Date().toISOString(),
             planExpiry: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
@@ -132,9 +133,9 @@ export default function PlanDetail({ planId, onBack, onDeposit }: PlanDetailProp
               const refData = refSnap.data() as UserProfile;
 
               transaction.update(refRef, {
-                balance: (refData.balance || 0) + commAmount,
-                totalEarnings: (refData.totalEarnings || 0) + commAmount,
-                todayTeamEarnings: (refData.todayTeamEarnings || 0) + commAmount,
+                balance: (Number(refData.balance) || 0) + commAmount,
+                totalEarnings: (Number(refData.totalEarnings) || 0) + commAmount,
+                todayTeamEarnings: (Number(refData.todayTeamEarnings) || 0) + commAmount,
                 updatedAt: new Date().toISOString()
               });
 
