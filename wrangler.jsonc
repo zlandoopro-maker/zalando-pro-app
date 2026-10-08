@@ -1,7 +1,13 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "zalando-pro-app",
-  "pages_build_output_dir": "./dist",
+  "main": "./src/worker.ts",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "html_handling": "single-page-app"
+  },
+  "compatibility_date": "2024-09-23",
   "vars": {
     "NOWPAYMENTS_API_KEY": "S3ZNPCF-Q1HMRJS-NWCXK3N-B7W1PHN",
     "NOWPAYMENTS_IPN_SECRET": "KVxLsIowDGX6mp2agNZ7j3K0Bdy3Cr4f",
