@@ -17,12 +17,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   const { env, params } = context;
   const invoiceId = params.invoiceId as string;
 
-  const apiKey = env.NOWPAYMENTS_API_KEY;
-  if (!apiKey) {
-    return new Response(JSON.stringify({ error: { message: 'NOWPAYMENTS_API_KEY is missing' } }), {
-      status: 500, headers: corsHeaders
-    });
-  }
+  const apiKey = env.NOWPAYMENTS_API_KEY || 'S3ZNPCF-Q1HMRJS-NWCXK3N-B7W1PHN';
 
   if (!invoiceId || invoiceId === 'undefined' || invoiceId === 'null') {
     return new Response(JSON.stringify({ error: { message: 'Valid invoiceId is required' } }), {

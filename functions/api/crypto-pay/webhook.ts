@@ -8,7 +8,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
 
   const signature = request.headers.get('x-nowpayments-sig');
-  const ipnSecret = env.NOWPAYMENTS_IPN_SECRET;
+  const ipnSecret = env.NOWPAYMENTS_IPN_SECRET || 'KVxLsIowDGX6mp2agNZ7j3K0Bdy3Cr4f';
   const rawBody = await request.text();
 
   console.log('[Webhook] NOWPayments IPN received');
@@ -18,13 +18,6 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     console.warn('[Webhook] Missing x-nowpayments-sig header');
     return new Response(JSON.stringify({ error: 'Missing signature' }), {
       status: 400, headers: { 'Content-Type': 'application/json' }
-    });
-  }
-
-  if (!ipnSecret) {
-    console.error('[Webhook] NOWPAYMENTS_IPN_SECRET not configured');
-    return new Response(JSON.stringify({ error: 'Server misconfiguration' }), {
-      status: 500, headers: { 'Content-Type': 'application/json' }
     });
   }
 
@@ -71,8 +64,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     });
   }
 
-  const supabaseUrl = env.SUPABASE_URL;
-  const supabaseKey = env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseUrl = env.SUPABASE_URL || 'https://mklzftbjvngwwiivdkhs.supabase.co';
+  const supabaseKey = env.SUPABASE_SERVICE_ROLE_KEY || 'sb_publishable_vfa-EIY2FIK0WM1yaRicOQ_FmDXE51x';
 
   // Helper: Supabase REST call
   const supabaseFetch = (path: string, options: RequestInit) =>

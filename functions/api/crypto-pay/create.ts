@@ -24,12 +24,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const body = await request.json() as { amount?: number; userId?: string; supabaseTransactionId?: string };
     const { amount, userId, supabaseTransactionId } = body;
 
-    const apiKey = env.NOWPAYMENTS_API_KEY;
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: { message: 'NOWPAYMENTS_API_KEY is missing in environment' } }), {
-        status: 500, headers: corsHeaders
-      });
-    }
+    const apiKey = env.NOWPAYMENTS_API_KEY || 'S3ZNPCF-Q1HMRJS-NWCXK3N-B7W1PHN';
+    const supabaseUrl = env.SUPABASE_URL || 'https://mklzftbjvngwwiivdkhs.supabase.co';
+    const supabaseKey = env.SUPABASE_SERVICE_ROLE_KEY || 'sb_publishable_vfa-EIY2FIK0WM1yaRicOQ_FmDXE51x';
 
     if (!amount || !userId || !supabaseTransactionId) {
       return new Response(JSON.stringify({ error: { message: 'amount, userId, and supabaseTransactionId are required' } }), {
@@ -75,13 +72,13 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     }
 
     // Update Supabase transaction with NOWPayments invoice_id
-    if (data.id && env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
+    if (data.id && supabaseUrl && supabaseKey) {
       try {
-        await fetch(`${env.SUPABASE_URL}/rest/v1/transactions?id=eq.${supabaseTransactionId}`, {
+        await fetch(`${supabaseUrl}/rest/v1/transactions?id=eq.${supabaseTransactionId}`, {
           method: 'PATCH',
           headers: {
-            'apikey': env.SUPABASE_SERVICE_ROLE_KEY,
-            'Authorization': `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`,
             'Content-Type': 'application/json',
             'Prefer': 'return=minimal'
           },
