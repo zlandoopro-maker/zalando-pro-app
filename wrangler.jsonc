@@ -1,0 +1,11 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "zalando-pro-app",
+  "pages_build_output_dir": "./dist",
+  "vars": {
+    "NOWPAYMENTS_API_KEY": "S3ZNPCF-Q1HMRJS-NWCXK3N-B7W1PHN",
+    "NOWPAYMENTS_IPN_SECRET": "KVxLsIowDGX6mp2agNZ7j3K0Bdy3Cr4f",
+    "SUPABASE_URL": "https://mklzftbjvngwwiivdkhs.supabase.co",
+    "SUPABASE_SERVICE_ROLE_KEY": "sb_publishable_vfa-EIY2FIK0WM1yaRicOQ_FmDXE51x"
+  }
+}
