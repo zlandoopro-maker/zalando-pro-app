@@ -2,16 +2,16 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { auth, db, googleProvider, handleFirestoreError, OperationType, resetAuthSystem, verifyClockIntegrity } from '../lib/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, signInAnonymously, sendPasswordResetEmail } from '../lib/firebase';
-import { doc, setDoc, getDoc, query, collection, where, getDocs } from '../lib/firebase';
+import { doc, setDoc, getDoc, updateDoc, query, collection, where, getDocs } from '../lib/firebase';
 import { Mail, Lock, AlertCircle, Loader2, UserPlus, Eye, EyeOff, User } from 'lucide-react';
 import Logo from './Logo';
 import { useNotification } from './NotificationProvider';
 import { Capacitor } from '@capacitor/core';
 import { GoogleSignIn } from '@capawesome/capacitor-google-sign-in';
-import { signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
 
 interface AuthProps {
   onSuccess: () => void;
+  key?: string;
 }
 
 export default function Auth({ onSuccess }: AuthProps) {
@@ -178,14 +178,21 @@ export default function Auth({ onSuccess }: AuthProps) {
         const userDocRef = doc(db, 'users', userCredential.user.uid);
         try {
           const userDoc = await getDoc(userDocRef);
-          if (userDoc.exists() && userDoc.data().isBlocked) {
-            await auth.signOut();
-            setError("Your account has been blocked by the admin.");
-            setLoading(false);
-            return;
-          }
-          // Auto-heal: create profile if it's missing for an existing auth user
-          if (!userDoc.exists()) {
+          if (userDoc.exists()) {
+            if (userDoc.data().isBlocked) {
+              await auth.signOut();
+              setError("Your account has been blocked by the admin.");
+              setLoading(false);
+              return;
+            }
+            if (referralCodeInput.trim() && !userDoc.data().referredBy) {
+              const referrerId = await processReferralIfAny(userCredential.user);
+              if (referrerId) {
+                await updateDoc(userDocRef, { referredBy: referrerId });
+              }
+            }
+          } else {
+            // Auto-heal: create profile if it's missing for an existing auth user
             const user = userCredential.user;
             await createInitialUserDocs(user, {
               userId: user.uid,
@@ -249,13 +256,12 @@ export default function Auth({ onSuccess }: AuthProps) {
           console.warn("Post-auth username verification warning:", checkErr);
         }
         
-        // Initialize user profile in Firestore with unique username and plaintext password
+        // Initialize user profile in Firestore with unique username
         await createInitialUserDocs(user, {
            userId: user.uid,
            email: user.email,
            username: cleanUsername,
            usernameLower: lowerUsername,
-           password: password,
            balance: 0,
            currentPlan: 'none', // default plan
            isAdmin: false,
@@ -305,12 +311,10 @@ export default function Auth({ onSuccess }: AuthProps) {
         if (!result.idToken) {
           throw new Error("No ID Token returned from native Google Sign-in.");
         }
-        const credential = GoogleAuthProvider.credential(result.idToken);
-        const userCredential = await signInWithCredential(auth, credential);
-        user = userCredential.user;
+        user = auth.currentUser;
       } else {
-        const result = await signInWithPopup(auth, googleProvider);
-        user = result.user;
+        await signInWithPopup(auth, googleProvider);
+        user = auth.currentUser;
       }
       
       const userDocPath = `users/${user.uid}`;
@@ -579,13 +583,13 @@ export default function Auth({ onSuccess }: AuthProps) {
               </div>
             )}
 
-            {!isLogin && !isForgotPassword && (
+            {!isForgotPassword && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
               >
                 <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                  Referral Code <span className="text-slate-400 font-normal">(Optional)</span>
+                  Referral Code / Invite ID <span className="text-slate-400 font-normal">(Optional)</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
@@ -596,7 +600,7 @@ export default function Auth({ onSuccess }: AuthProps) {
                     value={referralCodeInput}
                     onChange={(e) => setReferralCodeInput(e.target.value.toUpperCase())}
                     className={`block w-full pl-11 pr-3 py-3 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all sm:text-sm ${isReferralCodeLocked ? 'bg-slate-100 dark:bg-[#1C1E24] text-slate-500 dark:text-slate-400 cursor-not-allowed' : 'bg-slate-50 dark:bg-[#1C1E24] dark:text-white focus:bg-white dark:focus:bg-[#252830]'}`}
-                    placeholder="E.g. A1B2C3"
+                    placeholder="Enter Referral Code (e.g. A1B2C3)"
                     readOnly={isReferralCodeLocked}
                   />
                 </div>

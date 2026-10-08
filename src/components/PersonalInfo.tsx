@@ -81,9 +81,9 @@ export default function PersonalInfo({ onBack }: PersonalInfoProps) {
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="absolute inset-0 bg-[#F8F9FD] dark:bg-[#0B0C10] z-50 overflow-y-auto scroll-container"
+      className="absolute inset-0 bg-[#F5F3FF] dark:bg-[#0B0C10] z-50 overflow-y-auto scroll-container"
     >
-      <div className="safe-top flex items-center p-4 bg-white dark:bg-[#15171B] border-b border-slate-100 dark:border-slate-800/50 sticky top-0 z-10 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-4">
+      <div className="safe-top flex items-center p-4 bg-[#F7F5FF] dark:bg-[#15171B] border-b border-[#E8E4FF] dark:border-slate-800/50 sticky top-0 z-10 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-4">
         <button 
           onClick={onBack}
           className="w-10 h-10 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-50 dark:hover:bg-[#1C1E24] transition-colors"
@@ -95,7 +95,7 @@ export default function PersonalInfo({ onBack }: PersonalInfoProps) {
 
       <div className="p-6 space-y-4">
         {profile && !profile.kycCompleted ? (
-          <div className="bg-white dark:bg-[#1C1E24] rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-800/50">
+          <div className="bg-[#F0EDFF] dark:bg-[#1C1E24] rounded-3xl p-6 shadow-sm border border-[#E8E4FF] dark:border-slate-800/50">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
                 <FileCheck className="w-6 h-6 text-primary" />
@@ -164,7 +164,8 @@ export default function PersonalInfo({ onBack }: PersonalInfoProps) {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full mt-6 bg-primary text-white py-4 rounded-2xl font-black text-lg shadow-lg shadow-primary/30 active:scale-95 transition-all flex items-center justify-center disabled:opacity-70 disabled:active:scale-100"
+                style={{ backgroundColor: '#10B981', color: 'white' }}
+                className="w-full mt-6 py-4 rounded-2xl font-black text-lg shadow-lg shadow-emerald-500/30 active:scale-95 transition-all flex items-center justify-center disabled:opacity-70 disabled:active:scale-100"
               >
                 {submitting ? <Loader2 className="w-6 h-6 animate-spin" /> : 'Submit KYC Verification'}
               </button>
@@ -173,7 +174,7 @@ export default function PersonalInfo({ onBack }: PersonalInfoProps) {
         ) : (
           <>
             {/* Profile Card */}
-            <div className="bg-white dark:bg-[#1C1E24] rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-800/50 flex flex-col items-center">
+            <div className="bg-[#F0EDFF] dark:bg-[#1C1E24] rounded-3xl p-6 shadow-sm border border-[#E8E4FF] dark:border-slate-800/50 flex flex-col items-center">
                 <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mb-4">
                     <User className="w-10 h-10 text-primary" />
                 </div>
@@ -182,7 +183,7 @@ export default function PersonalInfo({ onBack }: PersonalInfoProps) {
             </div>
 
             {/* Info List */}
-            <div className="bg-white dark:bg-[#1C1E24] rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800/50 divide-y divide-slate-50 dark:divide-slate-800/50">
+            <div className="bg-[#F0EDFF] dark:bg-[#1C1E24] rounded-3xl shadow-sm border border-[#E8E4FF] dark:border-slate-800/50 divide-y divide-[#EAE7FF] dark:divide-slate-800/50">
                 <div className="p-5 flex items-center gap-4">
                     <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-500/10 flex items-center justify-center">
                         <Mail className="w-5 h-5 text-blue-500" />

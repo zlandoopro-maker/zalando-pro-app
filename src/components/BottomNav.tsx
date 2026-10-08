@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react';
 import { Home, FileText, CircleUser } from 'lucide-react';
 import { Screen } from '../types';
 import { vibrateLight } from '../lib/haptics';
+import { auth } from '../lib/firebase';
 
 // Custom 3-users icon — supports gradient stroke when active
 const UsersThreeIcon = ({ active = false, className = "" }: { active?: boolean; className?: string }) => (
@@ -32,6 +34,25 @@ interface BottomNavProps {
 }
 
 export default function BottomNav({ activeScreen, onNavigate }: BottomNavProps) {
+  const [hasUnclaimed, setHasUnclaimed] = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      if (!auth.currentUser) return;
+      try {
+        const cached = localStorage.getItem(`shipped_${auth.currentUser.uid}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          const has = parsed.some((o: any) => !o.claimed && ((Date.now() - new Date(o.createdAt).getTime()) / 1000) >= 180);
+          setHasUnclaimed(has);
+        }
+      } catch (e) {}
+    };
+    check();
+    const interval = setInterval(check, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
   const tabs = [
     { id: 'home',      label: 'Home',         icon: 'home'    },
     { id: 'orders',    label: 'Order Record', icon: 'orders'  },
@@ -64,7 +85,7 @@ export default function BottomNav({ activeScreen, onNavigate }: BottomNavProps) 
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-[#5d67b8] flex items-center justify-between z-[60] pb-[env(safe-area-inset-bottom,0px)] shadow-[0_-5px_20px_rgba(0,0,0,0.1)]">
+    <div className="absolute bottom-0 left-0 right-0 max-w-[430px] mx-auto h-[60px] bg-[#5d67b8] flex items-center justify-between z-[60] shadow-[0_-4px_16px_rgba(0,0,0,0.15)]">
 
       {/* Hidden SVG gradient definition used by icon strokes */}
       <svg width="0" height="0" style={{ position: 'absolute', pointerEvents: 'none' }}>
@@ -82,18 +103,23 @@ export default function BottomNav({ activeScreen, onNavigate }: BottomNavProps) 
           <button
             key={tab.id}
             onClick={() => { vibrateLight(); onNavigate(tab.id as Screen); }}
-            className="flex flex-col items-center justify-center gap-1 py-3 flex-1 active:scale-95 transition-transform"
+            className="flex flex-col items-center justify-center gap-0.5 h-full flex-1 active:scale-95 transition-transform py-1"
           >
-            <div className={`transition-all duration-200 ${
+            <div className={`transition-all duration-200 relative ${
               isActive
                 ? 'opacity-100 scale-110 drop-shadow-[0_2px_10px_rgba(147,51,234,0.6)]'
                 : 'opacity-70'
             }`}>
               {renderIcon(tab.icon, isActive)}
+              {tab.id === 'orders' && hasUnclaimed && (
+                <div className="absolute -top-2 -right-2 min-w-[18px] h-[18px] px-1 bg-[#FF3333] rounded-full border-2 border-[#5d67b8] flex items-center justify-center shadow-[0_2px_8px_rgba(255,51,51,0.6)] animate-bounce z-10">
+                  <span className="text-[10px] font-black text-white leading-none pb-[1px]">1</span>
+                </div>
+              )}
             </div>
 
             <span
-              className={`text-[11px] transition-all duration-200 font-medium ${
+              className={`text-[10px] transition-all duration-200 font-medium leading-none ${
                 isActive ? 'opacity-100 font-semibold' : 'text-white opacity-70'
               }`}
               style={isActive ? {

@@ -2,7 +2,12 @@ import { motion } from 'motion/react';
 import { ChevronLeft, Calculator, Activity, ArrowRight, Wallet, Percent, Calendar } from 'lucide-react';
 import { TIERS } from '../lib/tiers';
 
-export default function CommissionRates({ onBack }: { onBack: () => void }) {
+interface CommissionRatesProps {
+  onBack: () => void;
+  key?: string;
+}
+
+export default function CommissionRates({ onBack }: CommissionRatesProps) {
   return (
     <motion.div 
       initial={{ opacity: 0 }}

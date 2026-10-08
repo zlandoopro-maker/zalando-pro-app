@@ -153,9 +153,9 @@ export default function Settings({ onBack }: SettingsProps) {
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="absolute inset-0 bg-[#F8F9FD] dark:bg-[#0B0C10] z-50 overflow-y-auto scroll-container"
+      className="absolute inset-0 bg-[#F5F3FF] dark:bg-[#0B0C10] z-50 overflow-y-auto scroll-container"
     >
-      <div className="safe-top flex items-center p-4 bg-white dark:bg-[#15171B] border-b border-slate-100 dark:border-slate-800/50 sticky top-0 z-10 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-4 notranslate" translate="no">
+      <div className="safe-top flex items-center p-4 bg-[#F7F5FF] dark:bg-[#15171B] border-b border-[#E8E4FF] dark:border-slate-800/50 sticky top-0 z-10 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-4 notranslate" translate="no">
         <button 
           onClick={onBack}
           className="w-10 h-10 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-50 dark:hover:bg-[#1C1E24] transition-colors"
@@ -166,7 +166,7 @@ export default function Settings({ onBack }: SettingsProps) {
       </div>
 
       <div className="p-6 space-y-6">
-        <div className="bg-white dark:bg-[#1C1E24] rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800/50 divide-y divide-slate-50 dark:divide-slate-800/50 text-slate-800 dark:text-slate-200">
+        <div className="bg-[#F0EDFF] dark:bg-[#1C1E24] rounded-3xl shadow-sm border border-[#E8E4FF] dark:border-slate-800/50 divide-y divide-[#EAE7FF] dark:divide-slate-800/50 text-slate-800 dark:text-slate-200">
             {/* Dark Mode */}
             <div className="p-5 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -260,9 +260,9 @@ export default function Settings({ onBack }: SettingsProps) {
               initial={{ opacity: 0, y: 100 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 100 }}
-              className="bg-white dark:bg-[#15171B] w-full max-w-sm rounded-[2rem] overflow-hidden flex flex-col max-h-[80vh]"
+              className="bg-[#F0EDFF] dark:bg-[#15171B] w-full max-w-sm rounded-[2rem] overflow-hidden flex flex-col max-h-[80vh]"
             >
-              <div className="safe-top p-6 border-b border-slate-100 dark:border-slate-800/80 flex justify-between items-center bg-white dark:bg-[#1C1E24] z-10 sticky top-0">
+              <div className="safe-top p-6 border-b border-[#E8E4FF] dark:border-slate-800/80 flex justify-between items-center bg-[#F0EDFF] dark:bg-[#1C1E24] z-10 sticky top-0">
                 <div>
                     <h3 className="font-black text-xl text-slate-800 dark:text-white uppercase italic tracking-tight">Select Language</h3>
                     <p className="text-xs font-bold text-slate-400 tracking-widest uppercase mt-1">Global Support</p>

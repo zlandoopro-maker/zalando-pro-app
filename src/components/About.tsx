@@ -33,10 +33,10 @@ export default function About({ onBack }: AboutProps) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 1.02 }}
-      className="relative min-h-screen bg-white dark:bg-black pb-24 font-sans overflow-y-auto"
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="absolute inset-0 z-50 bg-white dark:bg-black pb-24 font-sans overflow-y-auto"
     >
       {/* Header */}
       <div 
@@ -44,7 +44,7 @@ export default function About({ onBack }: AboutProps) {
           backdropFilter: 'blur(20px) saturate(180%)',
           WebkitBackdropFilter: 'blur(20px) saturate(180%)'
         }}
-        className="safe-top sticky top-0 z-50 bg-white/60 dark:bg-black/60 border-b border-black/5 dark:border-white/10 px-4 py-3.5 flex items-center justify-between transition-all"
+        className="sticky top-0 z-50 bg-white/60 dark:bg-black/60 border-b border-black/5 dark:border-white/10 px-4 pt-[max(1rem,env(safe-area-inset-top,0px))] pb-3.5 flex items-center justify-between transition-all"
       >
         <button
           onClick={onBack}

@@ -83,14 +83,14 @@ export default function TeamMechanism({ onBack, onNavigate }: TeamMechanismProps
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="relative min-h-screen bg-white dark:bg-black pb-24 font-sans overflow-y-auto"
+      className="relative min-h-screen bg-[#F5F3FF] dark:bg-black pb-24 font-sans overflow-y-auto"
     >
       <div 
         style={{
           backdropFilter: 'blur(20px) saturate(180%)',
           WebkitBackdropFilter: 'blur(20px) saturate(180%)'
         }}
-        className="safe-top sticky top-0 z-50 bg-white/60 dark:bg-black/60 border-b border-black/5 dark:border-white/10 px-4 py-3.5 flex items-center justify-between transition-all"
+        className="safe-top sticky top-0 z-50 bg-[#F7F5FF]/80 dark:bg-black/60 border-b border-black/5 dark:border-white/10 px-4 py-3.5 flex items-center justify-between transition-all"
       >
         <button 
           onClick={() => { vibrateLight(); onBack(); }}

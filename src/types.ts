@@ -1,4 +1,4 @@
-export type Screen = 'intro1' | 'intro2' | 'intro3' | 'welcome' | 'auth' | 'home' | 'tasks' | 'orders' | 'account' | 'referrals' | 'admin' | 'coming-soon' | 'deposit' | 'withdrawal' | 'transfer' | 'plan-detail' | 'app-intro' | 'app-tutorial' | 'help-chat' | 'personal-info' | 'linked-mobile' | 'security-center' | 'settings' | 'commission-rates' | 'about' | 'team-mechanism' | 'language-selection';
+export type Screen = 'intro1' | 'intro2' | 'intro3' | 'welcome' | 'auth' | 'home' | 'tasks' | 'orders' | 'account' | 'referrals' | 'admin' | 'coming-soon' | 'deposit' | 'withdrawal' | 'transfer' | 'plan-detail' | 'app-intro' | 'app-tutorial' | 'help-chat' | 'personal-info' | 'linked-mobile' | 'security-center' | 'settings' | 'commission-rates' | 'about' | 'team-mechanism' | 'language-selection' | 'transaction-history' | 'terms-conditions' | 'refund-policy';
 
 export interface UserProfile {
   userId: string;
@@ -72,10 +72,14 @@ export interface Transaction {
 export interface ReferralRecord {
   id: string;
   referrerId: string;
+  l2ReferrerId?: string;
+  l3ReferrerId?: string;
   inviteeId: string;
   inviteeName: string;
   planType: string;
   commissionEarned: number;
+  commissionType?: 'referral_bonus' | 'task_commission' | 'team_commission';
+  level?: 1 | 2 | 3;
   timestamp: string;
 }
 

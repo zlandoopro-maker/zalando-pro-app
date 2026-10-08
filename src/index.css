@@ -8,6 +8,10 @@
   --color-accent: #fbbf24;
   --color-zalando-blue: #4A69BD;
   --safe-top: env(safe-area-inset-top, 24px); /* Fallback for Android notches */
+  /* Lavender background palette */
+  --color-bg-base: #F5F3FF;
+  --color-bg-soft: #F0EDFF;
+  --color-bg-light: #F7F5FF;
 }
 
 @layer base {
@@ -18,7 +22,7 @@
   }
 
   body {
-    @apply font-sans bg-[#F8FAFF] text-slate-900 transition-colors duration-300 antialiased;
+    @apply font-sans bg-[#F5F3FF] text-slate-900 transition-colors duration-300 antialiased;
     /* Smooth scrolling everywhere */
     scroll-behavior: smooth;
     /* Hardware acceleration for all animations */
@@ -28,17 +32,27 @@
     overscroll-behavior: none;
     /* Prevent pull-to-refresh */
     overscroll-behavior-y: none;
-    /* Better tap response */
+    /* Immediate touch response */
     touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
     /* Use fill-available for perfect mobile height */
     min-height: 100vh;
     min-height: -webkit-fill-available;
   }
 
-  button {
-    @apply transition-all duration-200 cursor-pointer;
-    /* Immediate tap, no 300ms delay */
+  /* Global Instant Tap Response */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button, a, [role="button"] {
+    @apply transition-all duration-150 cursor-pointer;
     touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  img {
+    content-visibility: auto;
   }
 
   input, textarea, select {
@@ -57,9 +71,10 @@
     overscroll-behavior-y: contain;
   }
 
-  /* Hardware accelerate all animated elements */
+  /* Hardware accelerate all animated and backdrop blurred elements for 60 FPS */
   [class*="animate-"],
-  [class*="transition-"] {
+  [class*="transition-"],
+  [class*="backdrop-blur"] {
     will-change: transform, opacity;
     transform: translateZ(0);
     -webkit-transform: translateZ(0);
@@ -70,7 +85,7 @@
 
 /* ===== Safe Area Insets (Notch / Dynamic Island support) ===== */
 .safe-top {
-  padding-top: max(env(safe-area-inset-top, 0px), 36px) !important;
+  padding-top: env(safe-area-inset-top, 0px) !important;
 }
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -84,8 +99,7 @@
 
 /* Bottom nav clears the safe area on notched phones */
 .nav-safe-bottom {
-  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
-  height: calc(5rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* ===== Scroll Containers ===== */
@@ -186,12 +200,12 @@
 
 @keyframes gold-glow-pulse {
   0%, 100% {
-    border-color: rgba(251, 191, 36, 0.7);
-    box-shadow: 0 0 20px rgba(251, 191, 36, 0.35), inset 0 0 12px rgba(251, 191, 36, 0.2);
+    border-color: rgba(251, 191, 36, 0.85);
+    box-shadow: 0 14px 38px -6px rgba(251, 191, 36, 0.55), 0 4px 14px rgba(0, 0, 0, 0.12), inset 0 0 12px rgba(251, 191, 36, 0.2);
   }
   50% {
     border-color: rgba(254, 240, 138, 1);
-    box-shadow: 0 0 35px rgba(250, 204, 21, 0.7), inset 0 0 25px rgba(250, 204, 21, 0.35);
+    box-shadow: 0 18px 48px -4px rgba(250, 204, 21, 0.8), 0 6px 20px rgba(0, 0, 0, 0.18), inset 0 0 25px rgba(250, 204, 21, 0.4);
   }
 }
 
@@ -216,12 +230,12 @@
 
 @keyframes diamond-glow-pulse {
   0%, 100% {
-    border-color: rgba(139, 92, 246, 0.7);
-    box-shadow: 0 0 20px rgba(139, 92, 246, 0.45), inset 0 0 12px rgba(167, 139, 250, 0.3);
+    border-color: rgba(139, 92, 246, 0.85);
+    box-shadow: 0 14px 38px -6px rgba(139, 92, 246, 0.55), 0 4px 14px rgba(0, 0, 0, 0.12), inset 0 0 12px rgba(167, 139, 250, 0.3);
   }
   50% {
     border-color: rgba(196, 181, 253, 1);
-    box-shadow: 0 0 40px rgba(139, 92, 246, 0.85), inset 0 0 25px rgba(196, 181, 253, 0.5);
+    box-shadow: 0 18px 48px -4px rgba(139, 92, 246, 0.85), 0 6px 20px rgba(0, 0, 0, 0.18), inset 0 0 25px rgba(196, 181, 253, 0.5);
   }
 }
 
@@ -248,4 +262,13 @@
   animation: crown-sparkle 2s infinite ease-in-out;
 }
 
+@keyframes hologram-text {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
 
+.animate-hologram {
+  background-size: 200% auto;
+  animation: hologram-text 6s linear infinite;
+}

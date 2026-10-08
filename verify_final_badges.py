@@ -1,8 +1,9 @@
 import os
+from pathlib import Path
 import numpy as np
 from PIL import Image
 
-BADGES_DIR = r"c:\Users\om shanti\Documents\ZalandoPro_App\public\badges"
+BADGES_DIR = str(Path(__file__).parent / "public" / "badges")
 
 for tier in ["trainee", "general", "senior", "regional", "reg_gen"]:
     silver_path = os.path.join(BADGES_DIR, f"{tier}.png")

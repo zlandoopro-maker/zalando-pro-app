@@ -18,11 +18,13 @@ import {
   Instagram,
   Youtube,
   Globe,
-  XCircle
+  XCircle,
+  RotateCcw,
+  Wallet
 } from 'lucide-react';
 import { UserProfile, Screen } from '../types';
 import { auth, db, handleFirestoreError, OperationType, parseUserProfile } from '../lib/firebase';
-import { doc, onSnapshot, updateDoc, collection, addDoc } from '../lib/firebase';
+import { doc, onSnapshot, updateDoc, collection, addDoc, getDoc } from '../lib/firebase';
 import { signOut } from '../lib/firebase';
 import Logo from './Logo';
 import { useNotification } from './NotificationProvider';
@@ -117,7 +119,6 @@ export default function Account({ onNavigate }: AccountProps) {
         console.warn("User document not found in Firestore, waiting for auto-heal...");
         setTimeout(async () => {
           try {
-            const { getDoc } = await import('../lib/firebase');
             const recheck = await getDoc(doc(db, 'users', auth.currentUser!.uid));
             if (!recheck.exists()) {
               showNotification("User profile not found. Please log in again.", { type: 'error' });
@@ -193,7 +194,7 @@ export default function Account({ onNavigate }: AccountProps) {
 
   if (!auth.currentUser) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[100dvh] bg-gray-50 dark:bg-[#0B0C10] p-8">
+      <div className="flex flex-col items-center justify-center min-h-[100dvh] bg-[#F5F3FF] dark:bg-[#0B0C10] p-8">
         <p className="text-rose-500 font-bold uppercase tracking-widest text-[10px] mb-4">Authentication Error</p>
         <p className="text-slate-500 text-sm mb-8 text-center">Please log in to view your account details.</p>
         <button
@@ -208,7 +209,7 @@ export default function Account({ onNavigate }: AccountProps) {
 
   if (!profile) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[100dvh] bg-gray-50 dark:bg-[#0B0C10] p-8">
+      <div className="flex flex-col items-center justify-center min-h-[100dvh] bg-[#F5F3FF] dark:bg-[#0B0C10] p-8">
         <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
         <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">Syncing with Blockchain...</p>
         <button
@@ -221,10 +222,11 @@ export default function Account({ onNavigate }: AccountProps) {
     );
   }
 
+  const hasActivePlan = profile.currentPlan && profile.currentPlan !== 'none';
   const currentTier = TIERS.find(t => t.id === profile.currentPlan);
-  const tierDisplayName = currentTier?.name || 'Trainee Manager';
+  const tierDisplayName = currentTier?.name || (hasActivePlan ? 'Member' : 'No Plan');
   const daysLeftText = (() => {
-    if (profile.planExpiry) {
+    if (hasActivePlan && profile.planExpiry) {
       const expiryTime = new Date(profile.planExpiry).getTime();
       const now = new Date().getTime();
       const diff = expiryTime - now;
@@ -232,15 +234,16 @@ export default function Account({ onNavigate }: AccountProps) {
         const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
         return `${days} Days`;
       }
+      return '0 Days';
     }
-    return '77 Days';
+    return '0 Days';
   })();
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="w-full min-h-full bg-[#F8F9FD] dark:bg-[#0B0C10] pb-[calc(8rem+env(safe-area-inset-bottom,0px))] transition-colors duration-300 flex flex-col shrink-0"
+      className="w-full min-h-full bg-[#F5F3FF] dark:bg-[#0B0C10] pb-[calc(4rem+env(safe-area-inset-bottom,0px))] transition-colors duration-300 flex flex-col shrink-0"
     >
       {/* 1. TOP HEADER */}
       <div className="w-full pt-9 pb-2 px-5 flex items-center justify-between relative">
@@ -284,7 +287,7 @@ export default function Account({ onNavigate }: AccountProps) {
       </div>
 
       {/* 3. MAIN ACCOUNT STATISTICS CARD */}
-      <div className="mx-4 bg-white dark:bg-[#15171B] rounded-[24px] p-6 shadow-[0_4px_25px_rgba(0,0,0,0.03)] border border-slate-100 dark:border-slate-800">
+      <div className="mx-4 bg-[#F0EDFF] dark:bg-[#15171B] rounded-[24px] p-6 shadow-[0_4px_25px_rgba(0,0,0,0.03)] border border-[#E8E4FF] dark:border-slate-800">
         <div className="grid grid-cols-2 text-center divide-x divide-slate-100 dark:divide-slate-800">
           {/* Left Column */}
           <div className="flex flex-col items-center justify-between space-y-5 pr-2">
@@ -343,7 +346,7 @@ export default function Account({ onNavigate }: AccountProps) {
       </div>
 
       {/* 4. ACTION SECTION */}
-      <div className="mx-4 mt-4 mb-6 bg-white dark:bg-[#15171B] rounded-[22px] p-4 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-slate-100 dark:border-slate-800">
+      <div className="mx-4 mt-4 mb-6 bg-[#F0EDFF] dark:bg-[#15171B] rounded-[22px] p-4 shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-[#E8E4FF] dark:border-slate-800">
         <div className="grid grid-cols-3 gap-2 text-center">
           {/* Withdraw */}
           <button
@@ -419,17 +422,17 @@ export default function Account({ onNavigate }: AccountProps) {
       </div>
 
       {/* Menu Options */}
-      <div className="mx-4 bg-white dark:bg-[#15171B] rounded-[2rem] border border-slate-100 dark:border-slate-800/50 shadow-[0_10px_30px_rgba(0,0,0,0.03)] dark:shadow-none divide-y divide-slate-50 dark:divide-slate-800/50 transition-colors duration-300 relative z-10">
+      <div className="mx-4 bg-[#F0EDFF] dark:bg-[#15171B] rounded-[2rem] border border-[#E8E4FF] dark:border-slate-800/50 shadow-[0_10px_30px_rgba(0,0,0,0.03)] dark:shadow-none divide-y divide-[#EAE7FF] dark:divide-slate-800/50 transition-colors duration-300 relative z-10">
         {[
           { icon: <User className="w-5 h-5 text-blue-500 dark:text-blue-400" />, label: 'Personal Information', screen: 'personal-info' },
-          { icon: <Phone className="w-5 h-5 text-green-500 dark:text-green-400" />, label: 'Linked Mobile Number', screen: 'linked-mobile' },
-          { icon: <Clock className="w-5 h-5 text-purple-500 dark:text-purple-400" />, label: 'Transaction History', screen: 'orders' },
-          { icon: <Globe className="w-5 h-5 text-sky-500 dark:text-sky-400" />, label: 'Join Social Hub', isSocialHub: true },
-          { icon: <ArrowDownToLine className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />, label: 'Download App', isDownload: true },
+          { icon: <Wallet className="w-5 h-5 text-green-500 dark:text-green-400" />, label: 'Linked Wallet Address', screen: 'linked-mobile' },
+          { icon: <Clock className="w-5 h-5 text-purple-500 dark:text-purple-400" />, label: 'Transaction History', screen: 'transaction-history' },
           { icon: <Shield className="w-5 h-5 text-blue-500 dark:text-blue-400" />, label: 'Security Center', screen: 'security-center' },
           { icon: <HelpCircle className="w-5 h-5 text-teal-500 dark:text-teal-400" />, label: 'Help Support', screen: 'help-chat' },
           { icon: <Settings className="w-5 h-5 text-slate-500 dark:text-slate-400" />, label: 'Settings', screen: 'settings' },
           { icon: <Info className="w-5 h-5 text-blue-500 dark:text-blue-400" />, label: 'About', screen: 'about' },
+          { icon: <Shield className="w-5 h-5 text-amber-500 dark:text-amber-400" />, label: 'Terms & Conditions', screen: 'terms-conditions' },
+          { icon: <RotateCcw className="w-5 h-5 text-rose-500 dark:text-rose-400" />, label: 'Refund Policy', screen: 'refund-policy' },
           ...(profile.isAdmin ? [{ icon: <Shield className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />, label: 'Admin Hub', screen: 'admin' as Screen }] : [])
         ].map((item, i) => (
           <div key={i} className="flex flex-col">
@@ -442,7 +445,7 @@ export default function Account({ onNavigate }: AccountProps) {
               className="w-full p-5 flex items-center justify-between group active:bg-slate-50 dark:active:bg-[#1C1E24] transition-colors"
             >
               <div className="flex items-center gap-4">
-                <div className="p-2 rounded-xl bg-slate-50 dark:bg-[#1C1E24] group-hover:bg-white dark:group-hover:bg-[#252830] transition-colors">
+                <div className="p-2 rounded-xl bg-[#EAE7FF] dark:bg-[#1C1E24] group-hover:bg-[#F7F5FF] dark:group-hover:bg-[#252830] transition-colors">
                   {item.icon}
                 </div>
                 <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{item.label}</span>
@@ -467,72 +470,6 @@ export default function Account({ onNavigate }: AccountProps) {
 
       </button>
 
-      <AnimatePresence>
-        {showSocialHub && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 dark:bg-black/80 backdrop-blur-sm"
-            onClick={() => setShowSocialHub(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-white dark:bg-[#1C1E24] rounded-[2rem] p-6 w-full max-w-sm shadow-2xl border border-slate-100 dark:border-slate-800 relative overflow-hidden"
-            >
-              <div className="absolute top-0 right-0 p-4">
-                <button onClick={() => setShowSocialHub(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
-                </button>
-              </div>
-              <div className="flex flex-col items-center mt-2">
-                <div className="w-16 h-16 bg-sky-50 dark:bg-sky-500/10 rounded-2xl flex items-center justify-center mb-4">
-                  <Globe className="w-8 h-8 text-sky-500" />
-                </div>
-                <h3 className="text-xl font-black text-slate-800 dark:text-white mb-6">Join Social Hub</h3>
-
-                <div className="w-full space-y-3">
-                  <button
-                    onClick={() => window.open(telegramLink, '_blank')}
-                    className="w-full flex justify-between items-center bg-[#E1F0FA] dark:bg-[#0088cc]/10 p-4 rounded-xl hover:opacity-90 active:scale-95 transition-all text-[#0088cc]"
-                  >
-                    <div className="flex items-center gap-3">
-                      <TelegramIcon />
-                      <span className="font-bold">Telegram</span>
-                    </div>
-                    <ChevronRight className="w-5 h-5 opacity-50" />
-                  </button>
-
-                  <button
-                    onClick={() => window.open(instagramLink, '_blank')}
-                    className="w-full flex justify-between items-center bg-pink-50 dark:bg-pink-500/10 p-4 rounded-xl hover:opacity-90 active:scale-95 transition-all text-pink-600 dark:text-pink-400"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Instagram className="w-6 h-6" />
-                      <span className="font-bold">Instagram</span>
-                    </div>
-                    <ChevronRight className="w-5 h-5 opacity-50" />
-                  </button>
-
-                  <button
-                    onClick={() => window.open(youtubeLink, '_blank')}
-                    className="w-full flex justify-between items-center bg-red-50 dark:bg-red-500/10 p-4 rounded-xl hover:opacity-90 active:scale-95 transition-all text-red-600 dark:text-red-500"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Youtube className="w-6 h-6" />
-                      <span className="font-bold">YouTube</span>
-                    </div>
-                    <ChevronRight className="w-5 h-5 opacity-50" />
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </motion.div>
   );
 }

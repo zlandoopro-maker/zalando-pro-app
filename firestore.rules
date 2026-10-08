@@ -80,18 +80,22 @@ service cloud.firestore {
                     incoming().isAdmin == false &&
                     incoming().balance == 0;
       
-      allow update: if isEmailVerified() && isValidId(userId) && (
-        (isOwner(userId) && (
-          // Action: Update Profile Info
-          (incoming().diff(existing()).affectedKeys().hasOnly(['displayName']) && incoming().displayName is string && incoming().displayName.size() <= 50) ||
-          // Action: App Logic State (usually updated via client in this demo architecture)
-          (incoming().diff(existing()).affectedKeys().hasOnly([
+      allow update: if (isOwner(userId) || isAdmin()) && isValidId(userId) && (
+        isAdmin() || (
+          // Ensure non-admins CANNOT change isAdmin flag or user identity
+          existing().isAdmin == false &&
+          incoming().isAdmin == false &&
+          incoming().userId == existing().userId &&
+          incoming().email == existing().email &&
+          incoming().balance is number && incoming().balance >= 0 &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'displayName', 'phone', 'dob', 'usdtAddress', 'binanceId',
             'balance', 'totalEarnings', 'todayTaskEarnings', 'todayTeamEarnings', 
             'currentPlan', 'planExpiry', 'tasksCompletedCount', 'lastTaskDate',
             'withdrawalLockUntil', 'lastWithdrawalDate', 'completedDaysCount',
             'updatedAt'
-          ]) && !existing().isAdmin && incoming().userId == existing().userId && incoming().email == existing().email && incoming().balance is number && incoming().balance >= 0)
-        )) || isAdmin()
+          ])
+        )
       );
     }
 

@@ -1,7 +1,8 @@
+from pathlib import Path
 import numpy as np
 from PIL import Image
 
-p = r"c:\Users\om shanti\Documents\ZalandoPro_App\public\badges\regional.png"
+p = str(Path(__file__).parent / "public" / "badges" / "regional.png")
 img = Image.open(p).convert("RGBA")
 arr = np.array(img)
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, startTransition, lazy, Suspense } from 'react';
 import { AnimatePresence } from 'motion/react';
-import { auth, db, onAuthStateChanged, doc, onSnapshot, updateDoc, setDoc, getDoc, parseUserProfile, verifyClockIntegrity } from './lib/firebase';
+import { auth, db, onAuthStateChanged, doc, onSnapshot, updateDoc, setDoc, getDoc, parseUserProfile, startClockMonitor, stopClockMonitor, initClockBaseline } from './lib/firebase';
 import { Screen } from './types';
 import { registerPushNotifications } from './lib/notificationSystem';
 import { vibrateLight } from './lib/haptics';
@@ -10,39 +10,42 @@ import { StatusBar, Style } from '@capacitor/status-bar';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { GoogleSignIn } from '@capawesome/capacitor-google-sign-in';
 
-// Lazy Load All Screens to massively reduce initial JS bundle size and CPU parsing
-const Intro1 = lazy(() => import('./components/Intro1'));
-const Intro2 = lazy(() => import('./components/Intro2'));
-const Intro3 = lazy(() => import('./components/Intro3'));
-const Auth = lazy(() => import('./components/Auth'));
-const Welcome = lazy(() => import('./components/Welcome'));
-const Home = lazy(() => import('./components/Home'));
-const DailyTasks = lazy(() => import('./components/DailyTasks'));
-const Account = lazy(() => import('./components/Account'));
-const Referrals = lazy(() => import('./components/Referrals'));
-const Admin = lazy(() => import('./components/Admin'));
-const ComingSoon = lazy(() => import('./components/ComingSoon'));
-const Deposit = lazy(() => import('./components/Deposit'));
-const Withdrawal = lazy(() => import('./components/Withdrawal'));
-const PlanDetail = lazy(() => import('./components/PlanDetail'));
-const AppIntroduction = lazy(() => import('./components/AppIntroduction'));
-const AppTutorial = lazy(() => import('./components/AppTutorial'));
-const OrderRecord = lazy(() => import('./components/OrderRecord'));
-const HelpChat = lazy(() => import('./components/HelpChat'));
-const PersonalInfo = lazy(() => import('./components/PersonalInfo'));
-const LinkedMobile = lazy(() => import('./components/LinkedMobile'));
-const SecurityCenter = lazy(() => import('./components/SecurityCenter'));
-const Settings = lazy(() => import('./components/Settings'));
-const Transfer = lazy(() => import('./components/Transfer'));
-const CommissionRates = lazy(() => import('./components/CommissionRates'));
-const TeamMechanism = lazy(() => import('./components/TeamMechanism'));
-const About = lazy(() => import('./components/About'));
-const LanguagePage = lazy(() => import('./components/LanguagePage'));
+// Direct Static Imports for screens to ensure instant loading and prevent Vite HMR lazy resolution errors
+import Intro1 from './components/Intro1';
+import Intro2 from './components/Intro2';
+import Intro3 from './components/Intro3';
+import Auth from './components/Auth';
+import Welcome from './components/Welcome';
+import Home from './components/Home';
+import DailyTasks from './components/DailyTasks';
+import Account from './components/Account';
+import Referrals from './components/Referrals';
+import Admin from './components/Admin';
+import ComingSoon from './components/ComingSoon';
+import Deposit from './components/Deposit';
+import Withdrawal from './components/Withdrawal';
+import PlanDetail from './components/PlanDetail';
+import AppIntroduction from './components/AppIntroduction';
+import AppTutorial from './components/AppTutorial';
+import OrderRecord from './components/OrderRecord';
+import HelpChat from './components/HelpChat';
+import PersonalInfo from './components/PersonalInfo';
+import LinkedMobile from './components/LinkedMobile';
+import SecurityCenter from './components/SecurityCenter';
+import Settings from './components/Settings';
+import Transfer from './components/Transfer';
+import CommissionRates from './components/CommissionRates';
+import TeamMechanism from './components/TeamMechanism';
+import About from './components/About';
+import LanguagePage from './components/LanguagePage';
+import TransactionHistory from './components/TransactionHistory';
+import TermsConditions from './components/TermsConditions';
+import RefundPolicy from './components/RefundPolicy';
 import BottomNav from './components/BottomNav';
 
 // Lightweight Fallback for lazy boundaries
 const ScreenFallback = () => (
-  <div className="flex items-center justify-center min-h-[100dvh] bg-gray-50 dark:bg-[#0B0C10]">
+  <div className="flex items-center justify-center min-h-[100dvh] bg-[#F5F3FF] dark:bg-[#0B0C10]">
     <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
   </div>
 );
@@ -82,20 +85,17 @@ export default function App() {
     });
   };
 
-  // --- BACKGROUND CLOCK MONITOR ---
+  // --- BULLETPROOF BACKGROUND CLOCK MONITOR ---
   useEffect(() => {
-    if (!user) return;
-
-    const checkTime = async () => {
-      await verifyClockIntegrity(showNotification);
-    };
-
-    // Check every 5 minutes
-    const interval = setInterval(checkTime, 5 * 60 * 1000);
-    // Also check on mount
-    checkTime();
-
-    return () => clearInterval(interval);
+    if (!user) {
+      stopClockMonitor();
+      return;
+    }
+    // Initialize monotonic baseline when user logs in
+    initClockBaseline();
+    // Start periodic checks every 5 minutes with auto-block on 3 strikes
+    startClockMonitor(showNotification, 5 * 60 * 1000);
+    return () => stopClockMonitor();
   }, [user]);
 
   useEffect(() => {
@@ -274,7 +274,7 @@ export default function App() {
         });
 
         // Intro screens always get Zalando Blue status bar
-        const color = isIntro ? '#4A69BD' : (isDark ? '#0B0C10' : '#F8FAFF');
+        const color = isIntro ? '#4A69BD' : (isDark ? '#0B0C10' : '#F5F3FF');
 
         await StatusBar.setBackgroundColor({ color });
       } catch (e) { }
@@ -416,7 +416,7 @@ export default function App() {
 
   if (initializing) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-[#0B0C10]">
+      <div className="flex items-center justify-center min-h-screen bg-[#F5F3FF] dark:bg-[#0B0C10]">
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
           <p className="text-gray-500 font-medium">Initializing Zalando Pro...</p>
@@ -430,19 +430,17 @@ export default function App() {
 
   // Wrapping AnimatePresence with Suspense provides the cleanest result.
   return (
-    <div
-      className="fixed inset-0 bg-[#F8FAFF] dark:bg-[#0B0C10] flex flex-col overflow-hidden"
-      style={{
-        paddingTop: 'max(env(safe-area-inset-top, 0px), 32px)',
-        paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 16px)'
-      }}
-    >
+    <div className="w-full h-full min-h-[100dvh] bg-[#F5F3FF] dark:bg-[#0B0C10] flex flex-col justify-center items-center overflow-hidden">
       <div
-        className={`flex-1 w-full max-w-md mx-auto relative bg-[#F5F5FA] shadow-2xl transition-colors duration-300 flex flex-col ${['orders', 'deposit', 'withdrawal', 'tasks'].includes(screen) ? 'overflow-hidden h-full' : 'overflow-y-auto scroll-container'
+        className={`w-full h-full min-h-[100dvh] md:min-h-0 md:h-[min(100dvh-2rem,920px)] md:max-w-[430px] md:my-auto md:rounded-[40px] md:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.4)] md:border md:border-slate-200 dark:md:border-slate-800/80 bg-[#F5F3FF] dark:bg-[#0B0C10] transition-colors duration-300 flex flex-col relative overflow-hidden ${['orders', 'deposit', 'withdrawal', 'tasks', 'plan-detail'].includes(screen) ? 'overflow-hidden' : ''
           }`}
-        style={{ WebkitOverflowScrolling: 'touch' }}
+        style={{
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          WebkitOverflowScrolling: 'touch'
+        }}
       >
-        <main className={`w-full flex-1 flex flex-col ${['orders', 'deposit', 'withdrawal', 'tasks'].includes(screen) ? 'h-full overflow-hidden' : 'shrink-0 min-h-full pb-20'
+        <main className={`w-full flex-1 flex flex-col ${['orders', 'deposit', 'withdrawal', 'tasks', 'plan-detail'].includes(screen) ? 'h-full overflow-hidden' : 'overflow-y-auto scroll-container shrink-0 min-h-full pb-[68px]'
           }`}>
           <Suspense fallback={<ScreenFallback />}>
             <AnimatePresence mode="wait">
@@ -504,24 +502,21 @@ export default function App() {
               {screen === 'linked-mobile' && <LinkedMobile key="linked-mobile" onBack={() => navigate('account')} />}
               {screen === 'security-center' && <SecurityCenter key="security-center" onBack={() => navigate('account')} />}
               {screen === 'settings' && <Settings key="settings" onBack={() => navigate('account')} />}
+              {screen === 'transaction-history' && <TransactionHistory key="transaction-history" onBack={() => navigate('account')} />}
               {screen === 'transfer' && <Transfer key="transfer" onBack={() => navigate('account')} />}
               {screen === 'commission-rates' && <CommissionRates key="commission-rates" onBack={() => navigate('home')} />}
               {screen === 'team-mechanism' && <TeamMechanism key="team-mechanism" onBack={() => navigate('home')} onNavigate={navigate} />}
               {screen === 'about' && <About key="about" onBack={() => navigate('account')} />}
               {screen === 'language-selection' && <LanguagePage key="language-selection" onBack={() => navigate('home')} />}
+              {screen === 'terms-conditions' && <TermsConditions key="terms-conditions" onBack={() => navigate('account')} />}
+              {screen === 'refund-policy' && <RefundPolicy key="refund-policy" onBack={() => navigate('account')} />}
             </AnimatePresence>
           </Suspense>
         </main>
-        {/* Spacer for navigation height so content doesn't get hidden behind it */}
-        {showNav && <div className="h-20 shrink-0" />}
+        {showNav && (
+          <BottomNav activeScreen={screen} onNavigate={navigate} />
+        )}
       </div>
-
-      {showNav && (
-        <BottomNav activeScreen={screen} onNavigate={navigate} />
-      )}
-
-      {/* Home Indicator bar (safe area aware) */}
-      <div className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+0.25rem)] left-1/2 -translate-x-1/2 w-24 h-1 bg-gray-300 rounded-full opacity-30 z-[70] pointer-events-none"></div>
     </div>
   );
 }

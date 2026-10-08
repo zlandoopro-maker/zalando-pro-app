@@ -1,33 +1,7 @@
 import { PositionTier } from '../types';
 
 export const TIERS: PositionTier[] = [
-  { 
-    id: 'starter', name: 'Starter Manager', price: 30, dailyTasks: 30, approxPrice: 20, reward: 1.20, commissionRate: '0.2%', stars: 5, status: 'apply', image: 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&auto=format&fit=crop&q=60',
-    flowSteps: {
-      step1: {
-        title: 'Retail Inventory Sourcing',
-        desc: 'Capital is used to acquire basic retail clearance inventory.',
-        detailTitle: 'Retail Inventory Sourcing',
-        detailDesc: 'At the Starter level, your capital is deployed to purchase clearance and off-season retail inventory in bulk. This allows for entry-level market participation with minimal risk.',
-        image: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=800&auto=format&fit=crop&q=80'
-      },
-      step2: {
-        title: 'Micro E-Commerce Sales',
-        desc: 'Items are individually resold on consumer platforms.',
-        detailTitle: 'Micro E-Commerce Sales',
-        detailDesc: 'These retail items are listed across various B2C e-commerce platforms. The system automatically manages these micro-sales, generating a steady, modest profit margin from consumer purchases.',
-        image: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800&auto=format&fit=crop&q=80'
-      },
-      step3: {
-        title: 'Starter Daily Commission',
-        desc: 'Earn basic daily returns from completed micro-sales.',
-        detailTitle: 'Starter Daily Commission',
-        detailDesc: 'Once the micro-sales are finalized daily, the profit margin is calculated and a fixed percentage is credited to your wallet. This provides a reliable introduction to e-commerce earnings.',
-        image: 'https://images.unsplash.com/photo-1580519542014-27034f63a3be?w=800&auto=format&fit=crop&q=80'
-      }
-    }
-  },
-  { 
+  {
     id: 'trainee', name: 'Trainee Manager', price: 50, dailyTasks: 30, approxPrice: 40, reward: 3.60, commissionRate: '0.3%', stars: 5, status: 'apply', image: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=800&auto=format&fit=crop&q=60',
     flowSteps: {
       step1: {
@@ -53,7 +27,7 @@ export const TIERS: PositionTier[] = [
       }
     }
   },
-  { 
+  {
     id: 'general', name: 'General Manager', price: 300, dailyTasks: 20, approxPrice: 200, reward: 20.00, commissionRate: '0.5%', stars: 5, status: 'apply', image: 'https://images.unsplash.com/photo-1573855619003-97b4799dcd8b?w=800&auto=format&fit=crop&q=60',
     flowSteps: {
       step1: {
@@ -79,7 +53,7 @@ export const TIERS: PositionTier[] = [
       }
     }
   },
-  { 
+  {
     id: 'senior', name: 'Senior Manager', price: 800, dailyTasks: 10, approxPrice: 500, reward: 50.00, commissionRate: '1%', stars: 5, status: 'apply', image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&auto=format&fit=crop&q=60',
     flowSteps: {
       step1: {
@@ -105,7 +79,7 @@ export const TIERS: PositionTier[] = [
       }
     }
   },
-  { 
+  {
     id: 'regional', name: 'Regional Manager', price: 2000, dailyTasks: 10, approxPrice: 1100, reward: 121.00, commissionRate: '1.1%', stars: 5, status: 'apply', image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&auto=format&fit=crop&q=60',
     flowSteps: {
       step1: {
@@ -131,7 +105,7 @@ export const TIERS: PositionTier[] = [
       }
     }
   },
-  { 
+  {
     id: 'reg_gen', name: 'Regional General Manager', price: 5000, dailyTasks: 10, approxPrice: 3000, reward: 390.00, commissionRate: '1.3%', stars: 5, status: 'apply', image: 'https://images.unsplash.com/photo-1555529771-835f59fc5efe?w=800&auto=format&fit=crop&q=60',
     flowSteps: {
       step1: {
@@ -157,7 +131,7 @@ export const TIERS: PositionTier[] = [
       }
     }
   },
-  { 
+  {
     id: 'reg_vp', name: 'Regional Vice President', price: 10000, dailyTasks: 5, approxPrice: 6000, reward: 850.00, commissionRate: '1.5%', stars: 5, status: 'apply', image: 'https://images.unsplash.com/photo-1581044777550-4cfa60707c03?w=800&auto=format&fit=crop&q=80',
     flowSteps: {
       step1: {
@@ -183,7 +157,7 @@ export const TIERS: PositionTier[] = [
       }
     }
   },
-  { 
+  {
     id: 'reg_pres', name: 'Regional President', price: 20000, dailyTasks: 5, approxPrice: 12000, reward: 1800.00, commissionRate: '1.8%', stars: 5, status: 'locked', buttonText: 'Stay Tuned', image: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=800&auto=format&fit=crop&q=80',
     flowSteps: {
       step1: {
@@ -209,7 +183,7 @@ export const TIERS: PositionTier[] = [
       }
     }
   },
-  { 
+  {
     id: 'cofounder', name: 'Co-Founder', price: 50000, dailyTasks: 5, approxPrice: 30000, reward: 5000.00, commissionRate: '2.0%', stars: 5, status: 'locked', buttonText: 'Stay Tuned', image: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=800&auto=format&fit=crop&q=80',
     flowSteps: {
       step1: {

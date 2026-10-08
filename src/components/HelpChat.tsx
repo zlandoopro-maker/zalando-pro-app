@@ -60,7 +60,7 @@ const EXTENDED_KNOWLEDGE_BASE: KnowledgeItem[] = [
       'password', 'forgot password', 'recover password', 'login issue', 'credentials', 'username', 'email',
       'password bhool gaya', 'reset password', 'account access', 'change password', 'passkey'
     ],
-    answer: "🔑 Password Recovery Assistant:\n\nIf you forgot your login password:\n👉 Simply type your Username (e.g. '@username' or your registered username) directly in this chat!\n\nI will search your registered account credentials and show your saved password safely.\n\n💡 Security Note: You can also update your security password in Account → Security Center anytime."
+    answer: "🔑 Password Recovery Assistant:\n\nIf you forgot your login password:\n👉 Use the 'Forgot Password?' link on the Login screen to receive an email reset link.\n\n💡 Security Note: You can also update your password anytime in Account → Security Center."
   },
   {
     id: 'daily_tasks',
@@ -87,7 +87,7 @@ const EXTENDED_KNOWLEDGE_BASE: KnowledgeItem[] = [
       'referral', 'refer', 'invite', 'friend', 'team', 'commission', 'mlm', 'level 1', 'level 2', 'level 3',
       'team mechanism', 'invitation link', 'invitation code', 'invite code', 'share link'
     ],
-    answer: "👥 3-Level Team Referral System:\n\nBuild your team and earn automated passive daily income whenever your members complete tasks:\n\n• Level 1 (Direct Referrals): Earn 5% of their daily task earnings.\n• Level 2 (Secondary Referrals): Earn 3% of their daily task earnings.\n• Level 3 (Sub-team Referrals): Earn 1% of their daily task earnings.\n\n🔗 How to Invite: Go to Home → Team Mechanism → tap 'Share Invitation Link' or copy your Referral Code!"
+    answer: "👥 3-Level Team Referral System:\n\nBuild your team and earn automated passive daily income whenever your members complete tasks:\n\n• Level 1 (Direct Referrals): Earn 10% referral bonus when they activate a plan + 5% of each their task earnings.\n• Level 2 (Secondary Referrals): Earn 5% of their daily task earnings.\n• Level 3 (Sub-team Referrals): Earn 2% of their daily task earnings.\n\n🔗 How to Invite: Go to Home → Team Mechanism → tap 'Share Invitation Link' or copy your Referral Code!"
   },
   {
     id: 'app_download',
@@ -137,10 +137,35 @@ const HINGLISH_NORMALIZATION_MAP: Record<string, string[]> = {
   'plan': ['upgrade', 'level', 'buy', 'purchase', 'tier']
 };
 
-const TXID_REGEX = /\b([a-zA-Z0-9]{15,28})\b/;
+const TXID_REGEX = /\b([a-fA-F0-9]{40,80}|[a-zA-Z0-9]{15,66})\b/;
+const TRACKING_ID_REGEX = /\b(ZAL-\d{6,12}|shipped_[a-zA-Z0-9_-]+|[a-zA-Z0-9]{8,28})\b/;
+
+async function lookupShippedOrder(trackingId: string, userId: string): Promise<string | null> {
+  try {
+    // Try exact ID first
+    const snap = await getDoc(doc(db, 'users', userId, 'shippedOrders', trackingId));
+    if (snap.exists()) {
+      const data = snap.data();
+      const claimed = data.claimed ? '✅ Claimed' : '⏳ Pending Claim';
+      const created = data.createdAt ? new Date(data.createdAt).toLocaleString() : 'Unknown';
+      return `📦 Shipped Order Status:\n\n🆔 Order ID: ${trackingId}\n📊 Status: ${claimed}\n💰 Claim Amount: $${(data.claimAmount || 0).toFixed(2)}\n🗂️ Total Items: ${data.totalTasks || 'N/A'}\n📅 Created: ${created}\n\n${data.claimed ? '✅ This order has already been claimed successfully!' : '⏳ This order is awaiting claim. Go to Order Record → Z Status to claim your profit.'}`;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 async function lookupTransaction(txId: string, userId: string): Promise<string> {
   try {
+    // First try shipped order lookup
+    const shippedResult = await lookupShippedOrder(txId, userId);
+    if (shippedResult) return shippedResult;
+
+    // Try shipped order with prefix
+    const withPrefix = `shipped_${txId}`;
+    const shippedResult2 = await lookupShippedOrder(withPrefix, userId);
+    if (shippedResult2) return shippedResult2;
     const txDocRef = doc(db, 'transactions', txId);
     const txSnap = await getDoc(txDocRef);
 
@@ -278,7 +303,7 @@ export default function HelpChat({ onBack }: HelpChatProps) {
     try {
       const lowerQuery = userMessage.text.toLowerCase();
 
-      // --- FEATURE 1: USERNAME PASSWORD RECOVERY LOOKUP ---
+      // --- FEATURE 1: USERNAME ENQUIRY SAFE RESPONSE ---
       const words = userMessage.text.trim().split(/\s+/).map(w => w.toLowerCase().replace(/^@/, ''));
       const ignoredKeywords = [
         'hello', 'hi', 'hey', 'help', 'admin', 'where', 'whats', 'which', 'deposit', 'withdraw',
@@ -292,26 +317,27 @@ export default function HelpChat({ onBack }: HelpChatProps) {
           if (!uSnap.empty) {
             const userData = uSnap.docs[0].data();
             const targetUsername = userData.username || rawWord;
-            const userPassword = userData.password || '(No plaintext password recorded)';
 
             await new Promise(resolve => setTimeout(resolve, 600));
-            const botResponse = `🔓 Account Credentials Recovered!\n\n👤 Username: @${targetUsername}\n📧 Email: ${userData.email || 'N/A'}\n🔑 Login Password: ${userPassword}\n\n💡 Security Reminder: Keep your credentials private and never share your password.`;
+            const botResponse = `👤 Account Registered: @${targetUsername}\n\n🔒 For your security, passwords are encrypted and cannot be displayed in chat.\n\n👉 If you forgot your password, please use 'Forgot Password?' on the Login screen or go to Account → Security Center.`;
             setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: botResponse } : msg));
             return;
           }
         }
       }
 
-      // --- FEATURE 2: TXID LIVE LOOKUP ---
+      // --- FEATURE 2: TXID / TRACKING ID LIVE LOOKUP ---
+      // Detect any ID-like string (TXID, shipped order ID, tracking number)
       const txidMatch = userMessage.text.match(TXID_REGEX);
-      if (txidMatch && auth.currentUser) {
-        const potentialTxId = txidMatch[1];
-        if (potentialTxId.length >= 15) {
-          await new Promise(resolve => setTimeout(resolve, 600));
-          const botResponse = await lookupTransaction(potentialTxId, auth.currentUser.uid);
-          setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: botResponse } : msg));
-          return;
-        }
+      const trackingMatch = userMessage.text.match(/ZAL-\d+/i) || userMessage.text.match(/shipped_[a-zA-Z0-9_-]+/);
+
+      const idToLookup = trackingMatch?.[0] || txidMatch?.[1];
+
+      if (idToLookup && idToLookup.length >= 8 && auth.currentUser) {
+        await new Promise(resolve => setTimeout(resolve, 700));
+        const botResponse = await lookupTransaction(idToLookup, auth.currentUser.uid);
+        setMessages(prev => prev.map(msg => msg.id === loadingId ? { ...msg, text: botResponse } : msg));
+        return;
       }
 
       // --- FEATURE 3: KNOWLEDGE BASE INTENT SEARCH ---
@@ -319,7 +345,7 @@ export default function HelpChat({ onBack }: HelpChatProps) {
       let botResponse = matchedKnowledge?.answer || '';
 
       // --- FEATURE 4: LIVE RECENT TRANSACTIONS ATTACHMENT ---
-      if (['deposit', 'withdraw', 'balance', 'transaction', 'pending', 'status', 'history'].some(kw => lowerQuery.includes(kw))) {
+      if (['deposit', 'withdraw', 'balance', 'transaction', 'pending', 'status', 'history', 'txid'].some(kw => lowerQuery.includes(kw))) {
         if (auth.currentUser) {
           try {
             const q = query(
@@ -327,7 +353,7 @@ export default function HelpChat({ onBack }: HelpChatProps) {
               where('userId', '==', auth.currentUser.uid),
               where('type', 'in', ['deposit', 'withdrawal']),
               orderBy('timestamp', 'desc'),
-              limit(3)
+              limit(5)
             );
             const snap = await getDocs(q);
             const txs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
@@ -337,14 +363,26 @@ export default function HelpChat({ onBack }: HelpChatProps) {
               txs.forEach(tx => {
                 const icon = tx.type === 'deposit' ? '📥' : '📤';
                 const statusIcon = tx.status === 'completed' ? '✅' : tx.status === 'pending' ? '⏳' : '❌';
-                botResponse += `\n${icon} ${tx.type.toUpperCase()}: $${(tx.amount || 0).toFixed(2)} ${statusIcon} ${tx.status?.toUpperCase()}`;
+                const time = tx.timestamp ? new Date(tx.timestamp).toLocaleDateString() : '';
+                botResponse += `\n${icon} ${tx.type.toUpperCase()}: $${(tx.amount || 0).toFixed(2)} ${statusIcon} ${tx.status?.toUpperCase()} — ${time}`;
+                if (tx.txid) botResponse += `\n   🆔 TXID: ${tx.txid}`;
               });
-              botResponse += "\n\n💡 Paste a specific TXID for detailed instant tracking!";
+              botResponse += "\n\n💡 Paste any TXID or Order ID for instant detailed tracking!";
             }
           } catch (err) {
             // Ignore index error fallback
           }
         }
+      }
+
+      // --- FEATURE 5: GREETING HANDLING ---
+      if (!botResponse && ['hello', 'hi', 'hey', 'helo', 'hii', 'salam', 'namaste', 'assalam', 'good morning', 'good evening'].some(g => lowerQuery.includes(g))) {
+        botResponse = "👋 Hello! Welcome to Zalando Pro Support!\n\nI am your 24/7 Smart Virtual Advisor. I can help you with:\n\n• 🔑 Password Recovery — just type your username\n• 🔍 TXID / Order ID Status — paste any ID\n• 💰 Deposit & Withdrawal Help\n• 📋 Daily Task Guide\n• 🎯 Tier Plan Info\n• 👥 Referral & Team Commission\n\nHow can I help you today?";
+      }
+
+      // --- FEATURE 6: BALANCE INQUIRY ---
+      if (!botResponse && ['balance', 'kitna', 'how much', 'mere paas', 'wallet'].some(kw => lowerQuery.includes(kw))) {
+        botResponse = "💰 To check your current balance:\n\nGo to Home tab → your total balance is shown at the top of the screen.\n\nYou can also see detailed breakdown in:\n• Account → Transaction History\n• Home → Total Balance widget\n\nWant me to look up a specific transaction? Paste your TXID or Order ID!";
       }
 
       // Default Intelligent Fallback
@@ -400,10 +438,7 @@ export default function HelpChat({ onBack }: HelpChatProps) {
               <h1 className="text-base font-bold text-[#1d1d1f] dark:text-[#f5f5f7] tracking-tight">Zalando Pro Support</h1>
               <ShieldCheck className="w-4 h-4 text-[#0071e3] dark:text-[#2997ff]" />
             </div>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="w-2 h-2 rounded-full bg-[#30d158] animate-pulse" />
-              <span className="text-[10px] font-semibold text-[#30d158] tracking-wider uppercase">Official Smart AI Advisor</span>
-            </div>
+
           </div>
         </div>
 

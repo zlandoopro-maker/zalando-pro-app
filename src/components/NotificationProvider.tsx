@@ -71,7 +71,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="w-full max-w-xs bg-white dark:bg-[#1C1E24] rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-slate-100 dark:border-slate-800/50 p-6 pointer-events-auto overflow-hidden relative"
+              className="w-full max-w-xs bg-[#F0EDFF] dark:bg-[#1C1E24] rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.15)] border border-[#E8E4FF] dark:border-slate-800/50 p-6 pointer-events-auto overflow-hidden relative"
             >
               <div className="flex flex-col items-center text-center space-y-4">
                 <div className={`w-16 h-16 rounded-full flex items-center justify-center ${

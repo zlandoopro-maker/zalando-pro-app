@@ -146,23 +146,59 @@ export default function Referrals({ onNavigate }: ReferralsProps) {
   const fL2 = filterByPeriod(l2Referrals);
   const fL3 = filterByPeriod(l3Referrals);
 
-  // Stats
-  const referralBonus  = fL1.reduce((s, r) => s + (r.commissionEarned || 0), 0);
-  const taskEarnings   = fL1.reduce((s, r) => s + (r.commissionEarned || 0), 0);
-  const teamEarnings   = [...fL2, ...fL3].reduce((s, r) => s + (r.commissionEarned || 0), 0);
+  // ─── Commission Rates ─────────────────────────────────────────────────────
+  // L1 referral = 10% of invitee's daily commission, L2 = 5%, L3 = 2%
+  const REFERRAL_BONUS_RATE = 0.10;  // L1: 10% referral bonus on plan activation
+  const TASK_COMMISSION_RATE = 0.05; // L1: 5% of each completed task commission
+  const L2_TEAM_RATE = 0.05;         // L2: 5% team commission
+  const L3_TEAM_RATE = 0.02;         // L3: 2% team commission
 
-  // Earning rows
+  // Stats — each type calculated separately
+  // Referral Bonus = commissions where type='referral_bonus' from L1
+  const referralBonus = fL1
+    .filter(r => r.commissionType === 'referral_bonus' || !r.commissionType)
+    .reduce((s, r) => s + (r.commissionEarned || 0), 0);
+
+  // Task Commission = commissions where type='task_commission' from L1
+  const taskEarnings = fL1
+    .filter(r => r.commissionType === 'task_commission')
+    .reduce((s, r) => s + (r.commissionEarned || 0), 0);
+
+  // Team Commission = L2 + L3 combined
+  const teamEarnings = [
+    ...fL2.map(r => ({ ...r, _teamRate: L2_TEAM_RATE })),
+    ...fL3.map(r => ({ ...r, _teamRate: L3_TEAM_RATE }))
+  ].reduce((s, r) => s + (r.commissionEarned || 0), 0);
+
+  // Earning rows — each tab shows its own data
   const getRows = (): EarningEntry[] => {
-    let source: ReferralRecord[] = [];
-    if (activeEarningTab === 'Referral Bonus')    source = fL1;
-    else if (activeEarningTab === 'Task Commission') source = fL1;
-    else source = [...fL2, ...fL3];
-    return source.map(r => ({
-      id:     r.id,
-      userId: r.inviteeName || (r.inviteeId ? r.inviteeId.substring(0, 10) : '—'),
-      amount: r.commissionEarned || 0,
-      time:   r.timestamp,
-    }));
+    if (activeEarningTab === 'Referral Bonus') {
+      return fL1
+        .filter(r => r.commissionType === 'referral_bonus' || !r.commissionType)
+        .map(r => ({
+          id:     r.id,
+          userId: r.inviteeName || (r.inviteeId ? r.inviteeId.substring(0, 10) : '—'),
+          amount: r.commissionEarned || 0,
+          time:   r.timestamp,
+        }));
+    } else if (activeEarningTab === 'Task Commission') {
+      return fL1
+        .filter(r => r.commissionType === 'task_commission')
+        .map(r => ({
+          id:     r.id,
+          userId: r.inviteeName || (r.inviteeId ? r.inviteeId.substring(0, 10) : '—'),
+          amount: r.commissionEarned || 0,
+          time:   r.timestamp,
+        }));
+    } else {
+      // Team Commission — L2 + L3
+      return [...fL2, ...fL3].map(r => ({
+        id:     r.id,
+        userId: r.inviteeName || (r.inviteeId ? r.inviteeId.substring(0, 10) : '—'),
+        amount: r.commissionEarned || 0,
+        time:   r.timestamp,
+      }));
+    }
   };
 
   const rows = getRows();
@@ -251,7 +287,7 @@ export default function Referrals({ onNavigate }: ReferralsProps) {
       {/* ── SCROLLABLE CONTENT ──────────────────────────────────────────── */}
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 80 }}>
 
-        {/* ── TEAM DATA TITLE ─────────────────────────────────────────── */}
+      {/* ── TEAM DATA TITLE ─────────────────────────────────────────── */}
         <div style={{ padding: '16px 16px 10px 16px' }}>
           <span style={{ fontSize: 15, fontWeight: 600, color: '#333', letterSpacing: 0.1 }}>Team Data</span>
         </div>

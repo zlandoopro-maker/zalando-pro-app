@@ -1,8 +1,10 @@
 import { Jimp } from 'jimp';
 
+import path from 'path';
+
 async function makeTransparent() {
-  const inputPath = 'C:/Users/om shanti/.gemini/antigravity-ide/brain/6657a03f-884a-4eb3-8fed-4f7a86bd9044/pointing_hand_3d_1790162463147.png';
-  const outputPath = 'c:/Users/om shanti/Documents/ZalandoPro_App/public/pointing_hand.png';
+  const inputPath = path.resolve(process.cwd(), 'public/pointing_hand.png');
+  const outputPath = path.resolve(process.cwd(), 'public/pointing_hand.png');
 
   const image = await Jimp.read(inputPath);
   const width = image.bitmap.width;

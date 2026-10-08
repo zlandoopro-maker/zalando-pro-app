@@ -166,6 +166,21 @@ export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void,
       });
   };
 
+  const handleToggleAdmin = async (user: UserProfile) => {
+      showNotification(`Are you sure you want to ${user.isAdmin ? 'remove Admin rights from' : 'make Admin'} ${user.email}?`, {
+        title: user.isAdmin ? 'REMOVE ADMIN' : 'MAKE ADMIN',
+        onConfirm: async () => {
+          const userRef = doc(db, 'users', user.userId);
+          try {
+            await updateDoc(userRef, { isAdmin: !user.isAdmin });
+            showNotification(`${user.email} is now ${!user.isAdmin ? 'an Admin' : 'a regular user'}`, { type: 'success', title: 'ADMIN UPDATED' });
+          } catch (err) {
+            handleFirestoreError(err, OperationType.UPDATE, `users/${user.userId}`);
+          }
+        }
+      });
+  };
+
   const handleDeleteUser = async (user: UserProfile) => {
     showNotification(`Are you sure you want to PERMANENTLY DELETE ${user.email}? This cannot be undone.`, {
       title: 'DELETE USER',
@@ -239,13 +254,9 @@ export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void,
         if (txSnap.data().status !== 'pending') throw new Error("Transaction already processed");
 
         if (tx.type === 'deposit') {
-          const userSnap = await transaction.get(userRef);
-          if (userSnap.exists()) {
-            const userData = userSnap.data();
-            transaction.update(userRef, {
-              balance: (userData.balance || 0) + (tx.amount || 0)
-            });
-          }
+          transaction.update(userRef, {
+            balance: increment(tx.amount || 0)
+          });
         }
         
         transaction.update(txRef, { status: 'completed', updatedAt: new Date().toISOString() });
@@ -275,13 +286,9 @@ export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void,
         if (txSnap.data().status !== 'pending') throw new Error("Transaction already processed");
 
         if (tx.type === 'withdrawal') {
-          const userSnap = await transaction.get(userRef);
-          if (userSnap.exists()) {
-            const userData = userSnap.data();
-            transaction.update(userRef, {
-              balance: (userData.balance || 0) + (tx.deductedAmount || tx.amount || 0)
-            });
-          }
+          transaction.update(userRef, {
+            balance: increment(tx.deductedAmount || tx.amount || 0)
+          });
         }
         
         transaction.update(txRef, { 
@@ -490,6 +497,7 @@ export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void,
                                     <div>
                                         <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
                                             {user.displayName || 'No Name'}
+                                            {user.isAdmin && <span className="bg-indigo-100 text-indigo-600 text-[8px] px-1.5 py-0.5 rounded-sm uppercase tracking-widest leading-none font-black flex items-center gap-1"><Shield className="w-2.5 h-2.5" /> Admin</span>}
                                             {user.createdAt?.startsWith(todayStr) && <span className="bg-emerald-100/50 text-emerald-600 text-[8px] px-1.5 py-0.5 rounded-sm uppercase tracking-widest leading-none">New</span>}
                                         </h4>
                                         <p className="text-[10px] text-slate-400">{user.email}</p>
@@ -506,6 +514,13 @@ export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void,
                                 </div>
                             </div>
                             <div className="flex flex-wrap gap-2">
+                                <button 
+                                  onClick={() => handleToggleAdmin(user)}
+                                  className={`flex-1 min-w-[30%] py-2 text-[10px] font-bold uppercase tracking-widest rounded-xl transition-colors flex items-center justify-center gap-2 ${user.isAdmin ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'}`}
+                                >
+                                    <Shield className="w-3 h-3" />
+                                    {user.isAdmin ? 'Remove Admin' : 'Make Admin'}
+                                </button>
                                 <button 
                                   onClick={() => {
                                       const amount = prompt('Enter new balance:', (user.balance || 0).toString());
@@ -824,7 +839,8 @@ export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void,
                         if (!title || !body) return;
 
                         try {
-                          const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/admin/broadcast`, {
+                          const baseUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000' : '');
+                          const res = await fetch(`${baseUrl}/api/admin/broadcast`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({

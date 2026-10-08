@@ -1,8 +1,9 @@
 import os
+from pathlib import Path
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
 
-BADGES_DIR = r"c:\Users\om shanti\Documents\ZalandoPro_App\public\badges"
+BADGES_DIR = str(Path(__file__).parent / "public" / "badges")
 
 tiers_config = {
     "starter": {

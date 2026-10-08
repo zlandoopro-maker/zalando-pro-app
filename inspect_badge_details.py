@@ -1,8 +1,9 @@
 import os
+from pathlib import Path
 import numpy as np
 from PIL import Image
 
-BADGES_DIR = r"c:\Users\om shanti\Documents\ZalandoPro_App\public\badges"
+BADGES_DIR = str(Path(__file__).parent / "public" / "badges")
 
 for f in ["starter.png", "trainee.png", "general.png", "senior.png", "regional.png", "reg_gen.png"]:
     p = os.path.join(BADGES_DIR, f)

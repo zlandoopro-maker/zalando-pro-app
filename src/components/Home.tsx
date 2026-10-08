@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { BookOpen, Info, Users, BarChart3, Star, ChevronLeft, ChevronRight, Lock, Headset, Globe, Shirt, ShoppingBag, TrendingUp, ArrowRight, X, Wallet } from 'lucide-react';
@@ -44,7 +44,7 @@ export default function Home({ onEnterTask, onNavigate, onViewPlan }: HomeProps)
   const [bannerUrl, setBannerUrl] = useState('https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?q=80&w=2070&auto=format&fit=crop');
   const [connected, setConnected] = useState(true);
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
-  
+
   // Banner Slideshow state - All 7 uploaded Zalando photos
   const bannerList = [
     '/banner1.png',
@@ -78,17 +78,37 @@ export default function Home({ onEnterTask, onNavigate, onViewPlan }: HomeProps)
   const [activeStepDetail, setActiveStepDetail] = useState<number | null>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isLongPressRef = useRef<boolean>(false);
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
 
-  const handlePressStart = (tier: PositionTier) => {
+  const handlePressStart = (tier: PositionTier, e?: React.TouchEvent | React.MouseEvent) => {
     isLongPressRef.current = false;
     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
-    
+
+    if (e && 'touches' in e && e.touches.length > 0) {
+      touchStartPosRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    } else {
+      touchStartPosRef.current = null;
+    }
+
+    // Deliberate 1.0 second hold to prevent accidental triggers while scrolling
     longPressTimerRef.current = setTimeout(() => {
       isLongPressRef.current = true;
       vibrateSuccess();
       playGlassSound();
       setPreviewTier(tier);
-    }, 450); // 450ms hold
+    }, 1000);
+  };
+
+  const handlePressMove = (e: React.TouchEvent | React.MouseEvent) => {
+    if (!longPressTimerRef.current) return;
+    if (e && 'touches' in e && e.touches.length > 0 && touchStartPosRef.current) {
+      const deltaX = Math.abs(e.touches[0].clientX - touchStartPosRef.current.x);
+      const deltaY = Math.abs(e.touches[0].clientY - touchStartPosRef.current.y);
+      // Cancel hold timer if user is scrolling or moving finger (> 8px)
+      if (deltaX > 8 || deltaY > 8) {
+        handlePressEnd();
+      }
+    }
   };
 
   const handlePressEnd = () => {
@@ -96,6 +116,7 @@ export default function Home({ onEnterTask, onNavigate, onViewPlan }: HomeProps)
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
+    touchStartPosRef.current = null;
   };
 
   useEffect(() => {
@@ -144,7 +165,7 @@ export default function Home({ onEnterTask, onNavigate, onViewPlan }: HomeProps)
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="w-full min-h-full bg-[#F8F9FD] dark:bg-[#0B0C10] pb-[calc(8rem+env(safe-area-inset-bottom,0px))] transition-colors duration-300 flex flex-col shrink-0"
+      className="w-full min-h-full bg-[#F5F3FF] dark:bg-[#0B0C10] pb-4 transition-colors duration-300 flex flex-col shrink-0"
     >
       {!connected && (
         <div className="safe-top bg-red-500 text-white text-[10px] py-1 px-4 text-center sticky top-0 z-[60]">
@@ -254,11 +275,10 @@ export default function Home({ onEnterTask, onNavigate, onViewPlan }: HomeProps)
                 <button
                   key={idx}
                   onClick={() => { vibrateLight(); setCurrentSlideIndex(idx); }}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${
-                    idx === currentSlideIndex
+                  className={`h-1.5 rounded-full transition-all duration-300 ${idx === currentSlideIndex
                       ? 'w-5 bg-white shadow-sm'
                       : 'w-1.5 bg-white/50 hover:bg-white/80'
-                  }`}
+                    }`}
                   aria-label={`Slide ${idx + 1}`}
                 />
               ))}
@@ -302,7 +322,7 @@ export default function Home({ onEnterTask, onNavigate, onViewPlan }: HomeProps)
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-black text-slate-900 dark:text-white italic tracking-tighter transition-colors">{t('position_tier')}</h2>
           <span className="text-[10px] font-bold text-primary dark:text-[#A1E3E8] bg-primary/10 dark:bg-primary/20 px-2.5 py-1 rounded-full flex items-center gap-1 animate-pulse">
-            <img src="/logo.png" className="w-3.5 h-3.5 object-contain" alt="Zalando Pro Logo" /> Hold card to preview model
+            <img src="/logo.png" className="w-3.5 h-3.5 object-contain" alt="Zalando Pro Logo" /> Hold card (1s) to preview
           </span>
         </div>
 
@@ -331,10 +351,12 @@ export default function Home({ onEnterTask, onNavigate, onViewPlan }: HomeProps)
                 }}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onMouseDown={() => handlePressStart(tier)}
+                onMouseDown={(e) => handlePressStart(tier, e)}
+                onMouseMove={handlePressMove}
                 onMouseUp={handlePressEnd}
                 onMouseLeave={handlePressEnd}
-                onTouchStart={() => handlePressStart(tier)}
+                onTouchStart={(e) => handlePressStart(tier, e)}
+                onTouchMove={handlePressMove}
                 onTouchEnd={handlePressEnd}
                 onTouchCancel={handlePressEnd}
                 onClick={(e) => {
@@ -353,13 +375,12 @@ export default function Home({ onEnterTask, onNavigate, onViewPlan }: HomeProps)
                     onViewPlan(tier.id);
                   }
                 }}
-                className={`relative h-32 rounded-[1.5rem] bg-white dark:bg-[#15171B] overflow-hidden flex transition-all duration-300 cursor-pointer ${
-                  tier.id === 'reg_gen'
-                    ? 'border-2 border-amber-400 dark:border-yellow-400/90 animate-gold-glow-pulse shadow-[0_0_25px_rgba(250,204,21,0.4)]'
+                className={`relative h-32 rounded-[1.5rem] bg-white dark:bg-[#15171B] overflow-hidden flex transition-all duration-300 cursor-pointer ${tier.id === 'reg_gen'
+                    ? 'border-2 border-amber-400 dark:border-yellow-400/90 animate-gold-glow-pulse shadow-[0_14px_38px_-6px_rgba(251,191,36,0.55),0_6px_16px_rgba(0,0,0,0.12)]'
                     : tier.id === 'reg_vp'
-                    ? 'border-2 border-violet-400 dark:border-violet-400/80 animate-diamond-glow-pulse shadow-[0_0_25px_rgba(139,92,246,0.5)]'
-                    : 'border-[1.5px] border-indigo-100/60 dark:border-slate-800/50 shadow-[0_4px_20px_rgba(139,134,223,0.15)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.2)]'
-                } ${isActivePlan ? 'ring-2 ring-primary ring-offset-2 dark:ring-offset-[#0B0D14]' : 'hover:-translate-y-1'}`}
+                      ? 'border-2 border-violet-400 dark:border-violet-400/80 animate-diamond-glow-pulse shadow-[0_14px_38px_-6px_rgba(139,92,246,0.55),0_6px_16px_rgba(0,0,0,0.12)]'
+                      : 'border-[1.5px] border-indigo-100/80 dark:border-slate-800/80 shadow-[0_10px_32px_-4px_rgba(74,105,189,0.32),0_4px_14px_rgba(0,0,0,0.08),0_2px_4px_rgba(0,0,0,0.04)] dark:shadow-[0_12px_36px_-6px_rgba(0,0,0,0.7),0_4px_16px_rgba(0,0,0,0.4)]'
+                  } ${isActivePlan ? 'ring-2 ring-primary ring-offset-2 dark:ring-offset-[#0B0D14] shadow-[0_16px_40px_-6px_rgba(74,105,189,0.48),0_6px_20px_rgba(0,0,0,0.15)]' : 'hover:-translate-y-1 hover:shadow-[0_18px_40px_-6px_rgba(74,105,189,0.42)]'}`}
               >
                 {/* Continuous Gold Shimmer Ray Sweep for Regional General Manager */}
                 {tier.id === 'reg_gen' && (
@@ -383,13 +404,13 @@ export default function Home({ onEnterTask, onNavigate, onViewPlan }: HomeProps)
                     alt=""
                   />
                   <div className={`absolute inset-0 ${tier.id === 'senior'
-                      ? 'bg-gradient-to-r from-amber-50/95 via-amber-50/75 to-amber-50/30 dark:from-[#15171B]/95 dark:via-amber-950/75 dark:to-amber-950/30'
-                      : tier.id === 'regional'
-                        ? 'bg-gradient-to-r from-indigo-50/95 via-indigo-50/75 to-indigo-50/30 dark:from-[#15171B]/95 dark:via-indigo-950/75 dark:to-indigo-950/30'
-                        : tier.id === 'reg_gen'
-                          ? 'bg-gradient-to-r from-amber-50/95 via-amber-100/70 to-blue-950/20 dark:from-[#15171B]/95 dark:via-amber-950/75 dark:to-amber-900/30'
-                          : tier.id === 'reg_vp'
-                            ? 'bg-gradient-to-r from-violet-50/95 via-purple-100/70 to-violet-200/20 dark:from-[#15171B]/95 dark:via-violet-950/75 dark:to-purple-900/30'
+                    ? 'bg-gradient-to-r from-amber-50/95 via-amber-50/75 to-amber-50/30 dark:from-[#15171B]/95 dark:via-amber-950/75 dark:to-amber-950/30'
+                    : tier.id === 'regional'
+                      ? 'bg-gradient-to-r from-indigo-50/95 via-indigo-50/75 to-indigo-50/30 dark:from-[#15171B]/95 dark:via-indigo-950/75 dark:to-indigo-950/30'
+                      : tier.id === 'reg_gen'
+                        ? 'bg-gradient-to-r from-amber-50/95 via-amber-100/70 to-blue-950/20 dark:from-[#15171B]/95 dark:via-amber-950/75 dark:to-amber-900/30'
+                        : tier.id === 'reg_vp'
+                          ? 'bg-gradient-to-r from-violet-50/95 via-purple-100/70 to-violet-200/20 dark:from-[#15171B]/95 dark:via-violet-950/75 dark:to-purple-900/30'
                           : 'bg-gradient-to-r from-white/95 via-white/75 to-white/30 dark:from-[#15171B]/95 dark:via-[#15171B]/75 dark:to-[#15171B]/30'
                     }`}></div>
                 </div>
@@ -407,13 +428,12 @@ export default function Home({ onEnterTask, onNavigate, onViewPlan }: HomeProps)
                   {/* Right: Info */}
                   <div className="flex-1 flex flex-col justify-center">
                     <div className="flex items-center gap-1.5">
-                      <h3 className={`text-lg font-black italic leading-tight transition-colors ${
-                        tier.id === 'reg_gen'
+                      <h3 className={`text-lg font-black italic leading-tight transition-colors ${tier.id === 'reg_gen'
                           ? 'bg-gradient-to-r from-amber-600 via-yellow-500 to-amber-700 dark:from-yellow-300 dark:via-amber-200 dark:to-yellow-400 bg-clip-text text-transparent drop-shadow-sm'
                           : tier.id === 'reg_vp'
-                          ? 'bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 dark:from-violet-300 dark:via-fuchsia-300 dark:to-pink-300 bg-clip-text text-transparent drop-shadow-sm'
-                          : 'text-slate-800 dark:text-white'
-                      }`}>
+                            ? 'bg-gradient-to-r from-violet-600 via-fuchsia-500 to-pink-500 dark:from-violet-300 dark:via-fuchsia-300 dark:to-pink-300 bg-clip-text text-transparent drop-shadow-sm'
+                            : 'text-slate-800 dark:text-white'
+                        }`}>
                         {tier.name}
                       </h3>
                       {tier.id === 'reg_gen' && (
@@ -431,11 +451,10 @@ export default function Home({ onEnterTask, onNavigate, onViewPlan }: HomeProps)
                     <div className="mt-1 flex items-center justify-between">
                       <div className="flex gap-0.5">
                         {Array.from({ length: 5 }).map((_, i) => (
-                          <Star key={i} className={`w-3.5 h-3.5 ${
-                            tier.id === 'reg_gen'
+                          <Star key={i} className={`w-3.5 h-3.5 ${tier.id === 'reg_gen'
                               ? 'text-amber-400 fill-amber-400 drop-shadow-[0_0_4px_rgba(250,204,21,0.8)]'
                               : 'text-yellow-400 dark:text-yellow-500 fill-yellow-400 dark:fill-yellow-500'
-                          }`} />
+                            }`} />
                         ))}
                       </div>
 
@@ -444,14 +463,13 @@ export default function Home({ onEnterTask, onNavigate, onViewPlan }: HomeProps)
                           {tier.buttonText}
                         </div>
                       ) : !isComingSoon ? (
-                        <div className={`flex items-center justify-center px-4 py-1.5 rounded-2xl text-xs font-bold shadow-sm transition-all active:scale-95 min-w-[76px] ${
-                          tier.id === 'reg_gen'
+                        <div className={`flex items-center justify-center px-4 py-1.5 rounded-2xl text-xs font-bold shadow-sm transition-all active:scale-95 min-w-[76px] ${tier.id === 'reg_gen'
                             ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black shadow-amber-500/30'
                             : tier.id === 'reg_vp'
-                            ? 'bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-500 text-white font-black shadow-fuchsia-500/40'
-                            : isActivePlan
-                            ? 'bg-[#4A69BD] text-white shadow-primary/20'
-                            : 'bg-white dark:bg-[#1C1E24] text-[#4A69BD] border border-[#4A69BD]/30 shadow-md'
+                              ? 'bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-500 text-white font-black shadow-fuchsia-500/40'
+                              : isActivePlan
+                                ? 'bg-[#4A69BD] text-white shadow-primary/20'
+                                : 'bg-white dark:bg-[#1C1E24] text-[#4A69BD] border border-[#4A69BD]/30 shadow-md'
                           }`}>
                           {isActivePlan ? t('enter') : t('apply')}
                         </div>
@@ -489,148 +507,148 @@ export default function Home({ onEnterTask, onNavigate, onViewPlan }: HomeProps)
       {createPortal(
         <AnimatePresence>
           {previewTier && (
-            <div
-              className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/40 dark:bg-black/60 transition-all duration-300"
-              onClick={() => {
-                playGlassSound();
-                setPreviewTier(null);
-              }}
-            >
-              <motion.div
-                initial={{ opacity: 0, y: 100, scale: 0.92 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 100, scale: 0.92 }}
-                transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                onClick={(e) => e.stopPropagation()}
-                className="bg-white/45 dark:bg-[#151722]/50 backdrop-blur-lg w-full max-w-md rounded-t-[2.2rem] sm:rounded-[2.2rem] p-4 sm:p-5 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.25)] border border-white/80 dark:border-white/20 relative max-h-[85vh] overflow-y-auto scroll-container group/modal"
+              <div
+                className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/40 dark:bg-black/70 backdrop-blur-xl transition-all duration-300"
+                onClick={() => {
+                  playGlassSound();
+                  setPreviewTier(null);
+                }}
               >
-                {/* Liquid Ambient Backlight Glow */}
-                <div className="absolute top-0 left-1/4 w-48 h-32 bg-gradient-to-r from-indigo-500/15 via-purple-500/15 to-cyan-400/15 rounded-full blur-2xl pointer-events-none" />
-                <div className="absolute -bottom-10 -right-10 w-44 h-44 bg-blue-500/15 rounded-full blur-2xl pointer-events-none" />
+                <motion.div
+                  initial={{ opacity: 0, y: 100, scale: 0.92 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 100, scale: 0.92 }}
+                  transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="bg-white/40 dark:bg-[#151722]/40 backdrop-blur-2xl w-full max-w-md rounded-t-[2.2rem] sm:rounded-[2.2rem] p-4 sm:p-5 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.3)] border border-white/60 dark:border-white/15 relative max-h-[85vh] overflow-y-auto scroll-container group/modal"
+                >
+                  {/* Liquid Ambient Backlight Glow */}
+                  <div className="absolute top-0 left-1/4 w-48 h-32 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-cyan-400/20 rounded-full blur-2xl pointer-events-none" />
+                  <div className="absolute -bottom-10 -right-10 w-44 h-44 bg-blue-500/20 rounded-full blur-2xl pointer-events-none" />
 
-                {/* Glossy Specular Glass Highlight Line */}
-                <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/90 dark:via-white/50 to-transparent pointer-events-none" />
+                  {/* Glossy Specular Glass Highlight Line */}
+                  <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-white/90 dark:via-white/50 to-transparent pointer-events-none" />
 
-                {/* Header */}
-                <div className="relative z-10 flex items-center justify-between mb-3 pb-2.5 border-b border-slate-900/10 dark:border-white/10">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-11 h-11 rounded-2xl bg-white/70 dark:bg-white/10 backdrop-blur-md flex items-center justify-center p-1.5 shadow-inner border border-white/80 dark:border-white/15 shrink-0">
-                      <TierBadge tierId={previewTier.id} className="w-8 h-8 drop-shadow-sm" mode="color" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[9px] font-black uppercase text-[#4A69BD] dark:text-[#A1E3E8] tracking-widest bg-[#4A69BD]/15 dark:bg-[#4A69BD]/30 backdrop-blur-md px-1.5 py-0.5 rounded border border-[#4A69BD]/30">
-                          Hold Preview
-                        </span>
-                        <span className="text-[9px] font-black uppercase text-slate-700 dark:text-slate-300">
-                          {previewTier.commissionRate} Rate
-                        </span>
+                  {/* Header */}
+                  <div className="relative z-10 flex items-center justify-between mb-3 pb-2.5 border-b border-slate-900/10 dark:border-white/10">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-11 h-11 rounded-2xl bg-white/50 dark:bg-white/10 backdrop-blur-xl flex items-center justify-center p-1.5 shadow-inner border border-white/70 dark:border-white/15 shrink-0">
+                        <TierBadge tierId={previewTier.id} className="w-8 h-8 drop-shadow-sm" mode="color" />
                       </div>
-                      <h3 className="text-base font-black text-slate-900 dark:text-white italic tracking-tight">{previewTier.name}</h3>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      playGlassSound();
-                      setPreviewTier(null);
-                    }}
-                    className="p-1.5 text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white bg-white/70 dark:bg-white/10 backdrop-blur-md hover:bg-white/90 dark:hover:bg-white/20 border border-white/80 dark:border-white/10 rounded-full transition-all active:scale-90"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Business Model Flow Card (Transparent Glass Container) */}
-                <div className="relative z-10 bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-2xl p-3 border border-white/70 dark:border-white/10 shadow-xs mb-3 space-y-2">
-                  <div className="flex items-center gap-1.5">
-                    <img src="/logo.png" className="w-4 h-4 object-contain drop-shadow-xs" alt="Zalando Pro Logo" />
-                    <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-900 dark:text-white">
-                      How Your Capital Generates Income
-                    </h4>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    {/* Step 1 */}
-                    <div
-                      onClick={() => { playGlassSound(); vibrateLight(); setActiveStepDetail(1); }}
-                      className="flex items-start gap-2.5 bg-white/70 dark:bg-[#1E222D]/60 backdrop-blur-md p-2 px-2.5 rounded-xl border border-white/80 dark:border-white/10 shadow-2xs hover:border-amber-400/40 cursor-pointer transition-all hover:scale-[1.02] active:scale-95"
-                    >
-                      <div className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 flex items-center justify-center shrink-0 font-black text-[10px]">
-                        1
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1 mb-0.5">
-                          <Shirt className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                          <span className="text-[11px] font-black text-slate-900 dark:text-white leading-none">{previewTier?.flowSteps?.step1.title || 'Clothing & Fashion Sourcing'}</span>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] font-black uppercase text-[#4A69BD] dark:text-[#A1E3E8] tracking-widest bg-[#4A69BD]/15 dark:bg-[#4A69BD]/30 backdrop-blur-md px-1.5 py-0.5 rounded border border-[#4A69BD]/30">
+                            Hold Preview
+                          </span>
+                          <span className="text-[9px] font-black uppercase text-slate-700 dark:text-slate-300">
+                            {previewTier.commissionRate} Rate
+                          </span>
                         </div>
-                        <p className="text-[10px] text-slate-700 dark:text-slate-300 leading-snug font-bold">
-                          {previewTier?.flowSteps?.step1.desc || 'Capital is deployed to procure high-demand European fashion bulk inventory.'}
-                        </p>
+                        <h3 className="text-base font-black text-slate-900 dark:text-white italic tracking-tight">{previewTier.name}</h3>
                       </div>
                     </div>
-
-                    {/* Step 2 */}
-                    <div
-                      onClick={() => { playGlassSound(); vibrateLight(); setActiveStepDetail(2); }}
-                      className="flex items-start gap-2.5 bg-white/70 dark:bg-[#1E222D]/60 backdrop-blur-md p-2 px-2.5 rounded-xl border border-white/80 dark:border-white/10 shadow-2xs hover:border-blue-400/40 cursor-pointer transition-all hover:scale-[1.02] active:scale-95"
+                    <button
+                      onClick={() => {
+                        playGlassSound();
+                        setPreviewTier(null);
+                      }}
+                      className="p-1.5 text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white bg-white/50 dark:bg-white/10 backdrop-blur-xl hover:bg-white/80 dark:hover:bg-white/20 border border-white/70 dark:border-white/15 rounded-full transition-all active:scale-90"
                     >
-                      <div className="w-6 h-6 rounded-lg bg-blue-500/20 text-blue-700 dark:text-blue-300 border border-blue-500/30 flex items-center justify-center shrink-0 font-black text-[10px]">
-                        2
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1 mb-0.5">
-                          <ShoppingBag className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                          <span className="text-[11px] font-black text-slate-900 dark:text-white leading-none">{previewTier?.flowSteps?.step2.title || 'Global E-Commerce Reselling'}</span>
-                        </div>
-                        <p className="text-[10px] text-slate-700 dark:text-slate-300 leading-snug font-bold">
-                          {previewTier?.flowSteps?.step2.desc || 'Merchandise is resold across retail networks at high profit margins.'}
-                        </p>
-                      </div>
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Business Model Flow Card (Transparent Frosted Glass Container) */}
+                  <div className="relative z-10 bg-white/35 dark:bg-white/5 backdrop-blur-xl rounded-2xl p-3 border border-white/60 dark:border-white/10 shadow-xs mb-3 space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <img src="/logo.png" className="w-4 h-4 object-contain drop-shadow-xs" alt="Zalando Pro Logo" />
+                      <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                        How Your Capital Generates Income
+                      </h4>
                     </div>
 
-                    {/* Step 3 */}
-                    <div
-                      onClick={() => { playGlassSound(); vibrateLight(); setActiveStepDetail(3); }}
-                      className="flex items-start gap-2.5 bg-white/70 dark:bg-[#1E222D]/60 backdrop-blur-md p-2 px-2.5 rounded-xl border border-white/80 dark:border-white/10 shadow-2xs hover:border-emerald-400/40 cursor-pointer transition-all hover:scale-[1.02] active:scale-95"
-                    >
-                      <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center justify-center shrink-0 font-black text-[10px]">
-                        3
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1 mb-0.5">
-                          <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                          <span className="text-[11px] font-black text-slate-900 dark:text-white leading-none">{previewTier?.flowSteps?.step3.title || 'Daily Guaranteed Commission'}</span>
+                    <div className="space-y-1.5">
+                      {/* Step 1 */}
+                      <div
+                        onClick={() => { playGlassSound(); vibrateLight(); setActiveStepDetail(1); }}
+                        className="flex items-start gap-2.5 bg-white/45 dark:bg-white/10 backdrop-blur-xl p-2 px-2.5 rounded-xl border border-white/70 dark:border-white/15 shadow-2xs hover:border-amber-400/50 cursor-pointer transition-all hover:scale-[1.02] active:scale-95"
+                      >
+                        <div className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 flex items-center justify-center shrink-0 font-black text-[10px]">
+                          1
                         </div>
-                        <p className="text-[10px] text-slate-700 dark:text-slate-300 leading-snug font-bold">
-                          {previewTier?.flowSteps?.step3.desc || 'Guaranteed resale commissions are credited directly to your wallet daily.'}
-                        </p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <Shirt className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                            <span className="text-[11px] font-black text-slate-900 dark:text-white leading-none">{previewTier?.flowSteps?.step1.title || 'Clothing & Fashion Sourcing'}</span>
+                          </div>
+                          <p className="text-[10px] text-slate-700 dark:text-slate-300 leading-snug font-bold">
+                            {previewTier?.flowSteps?.step1.desc || 'Capital is deployed to procure high-demand European fashion bulk inventory.'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Step 2 */}
+                      <div
+                        onClick={() => { playGlassSound(); vibrateLight(); setActiveStepDetail(2); }}
+                        className="flex items-start gap-2.5 bg-white/45 dark:bg-white/10 backdrop-blur-xl p-2 px-2.5 rounded-xl border border-white/70 dark:border-white/15 shadow-2xs hover:border-blue-400/50 cursor-pointer transition-all hover:scale-[1.02] active:scale-95"
+                      >
+                        <div className="w-6 h-6 rounded-lg bg-blue-500/20 text-blue-700 dark:text-blue-300 border border-blue-500/30 flex items-center justify-center shrink-0 font-black text-[10px]">
+                          2
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <ShoppingBag className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                            <span className="text-[11px] font-black text-slate-900 dark:text-white leading-none">{previewTier?.flowSteps?.step2.title || 'Global E-Commerce Reselling'}</span>
+                          </div>
+                          <p className="text-[10px] text-slate-700 dark:text-slate-300 leading-snug font-bold">
+                            {previewTier?.flowSteps?.step2.desc || 'Merchandise is resold across retail networks at high profit margins.'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Step 3 */}
+                      <div
+                        onClick={() => { playGlassSound(); vibrateLight(); setActiveStepDetail(3); }}
+                        className="flex items-start gap-2.5 bg-white/45 dark:bg-white/10 backdrop-blur-xl p-2 px-2.5 rounded-xl border border-white/70 dark:border-white/15 shadow-2xs hover:border-emerald-400/50 cursor-pointer transition-all hover:scale-[1.02] active:scale-95"
+                      >
+                        <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center justify-center shrink-0 font-black text-[10px]">
+                          3
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <span className="text-[11px] font-black text-slate-900 dark:text-white leading-none">{previewTier?.flowSteps?.step3.title || 'Daily Guaranteed Commission'}</span>
+                          </div>
+                          <p className="text-[10px] text-slate-700 dark:text-slate-300 leading-snug font-bold">
+                            {previewTier?.flowSteps?.step3.desc || 'Guaranteed resale commissions are credited directly to your wallet daily.'}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Tier Stats Grid (Frosted Glass Cards) */}
-                <div className="relative z-10 grid grid-cols-2 gap-2 mb-3.5">
-                  <div className="bg-white/50 dark:bg-white/5 backdrop-blur-md p-2.5 px-3 rounded-xl border border-white/70 dark:border-white/10 shadow-2xs">
-                    <span className="text-[8px] font-black uppercase text-slate-600 dark:text-slate-400 tracking-wider block mb-0.5">Required Deposit</span>
-                    <span className="text-base font-black text-slate-900 dark:text-white tracking-tight">${previewTier.price}</span>
-                  </div>
+                  {/* Tier Stats Grid (Frosted Glass Cards) */}
+                  <div className="relative z-10 grid grid-cols-2 gap-2 mb-3.5">
+                    <div className="bg-white/35 dark:bg-white/5 backdrop-blur-xl p-2.5 px-3 rounded-xl border border-white/60 dark:border-white/10 shadow-2xs">
+                      <span className="text-[8px] font-black uppercase text-slate-600 dark:text-slate-400 tracking-wider block mb-0.5">Required Deposit</span>
+                      <span className="text-base font-black text-slate-900 dark:text-white tracking-tight">${previewTier.price}</span>
+                    </div>
 
-                  <div className="bg-white/50 dark:bg-white/5 backdrop-blur-md p-2.5 px-3 rounded-xl border border-white/70 dark:border-white/10 shadow-2xs">
-                    <span className="text-[8px] font-black uppercase text-slate-600 dark:text-slate-400 tracking-wider block mb-0.5">Daily Task Limit</span>
-                    <span className="text-base font-black text-slate-900 dark:text-white tracking-tight">{previewTier.dailyTasks} Tasks</span>
-                  </div>
+                    <div className="bg-white/35 dark:bg-white/5 backdrop-blur-xl p-2.5 px-3 rounded-xl border border-white/60 dark:border-white/10 shadow-2xs">
+                      <span className="text-[8px] font-black uppercase text-slate-600 dark:text-slate-400 tracking-wider block mb-0.5">Daily Task Limit</span>
+                      <span className="text-base font-black text-slate-900 dark:text-white tracking-tight">{previewTier.dailyTasks} Tasks</span>
+                    </div>
 
-                  <div className="bg-emerald-500/15 dark:bg-emerald-500/20 backdrop-blur-md p-2.5 px-3 rounded-xl border border-emerald-500/30 shadow-2xs">
-                    <span className="text-[8px] font-black uppercase text-emerald-700 dark:text-emerald-300 tracking-wider block mb-0.5">Daily Reward</span>
-                    <span className="text-base font-black text-emerald-700 dark:text-emerald-300 tracking-tight">${previewTier.reward.toFixed(2)}/day</span>
-                  </div>
+                    <div className="bg-emerald-500/15 dark:bg-emerald-500/20 backdrop-blur-xl p-2.5 px-3 rounded-xl border border-emerald-500/30 shadow-2xs">
+                      <span className="text-[8px] font-black uppercase text-emerald-700 dark:text-emerald-300 tracking-wider block mb-0.5">Daily Reward</span>
+                      <span className="text-base font-black text-emerald-700 dark:text-emerald-300 tracking-tight">${previewTier.reward.toFixed(2)}/day</span>
+                    </div>
 
-                  <div className="bg-indigo-500/15 dark:bg-indigo-500/20 backdrop-blur-md p-2.5 px-3 rounded-xl border border-indigo-500/30 shadow-2xs">
-                    <span className="text-[8px] font-black uppercase text-indigo-700 dark:text-indigo-300 tracking-wider block mb-0.5">90-Day Return</span>
-                    <span className="text-base font-black text-indigo-700 dark:text-indigo-300 tracking-tight">${(previewTier.reward * 90).toFixed(2)}</span>
+                    <div className="bg-indigo-500/15 dark:bg-indigo-500/20 backdrop-blur-xl p-2.5 px-3 rounded-xl border border-indigo-500/30 shadow-2xs">
+                      <span className="text-[8px] font-black uppercase text-indigo-700 dark:text-indigo-300 tracking-wider block mb-0.5">90-Day Return</span>
+                      <span className="text-base font-black text-indigo-700 dark:text-indigo-300 tracking-tight">${(previewTier.reward * 90).toFixed(2)}</span>
+                    </div>
                   </div>
-                </div>
 
                 {/* Action Button (Vibrant Solid Gradient, 100% Opacity & Contrast) */}
                 <button
@@ -647,10 +665,19 @@ export default function Home({ onEnterTask, onNavigate, onViewPlan }: HomeProps)
                       onViewPlan(tier.id);
                     }
                   }}
-                  className="relative z-10 w-full py-3.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-black uppercase tracking-widest text-xs shadow-[0_0_20px_rgba(79,70,229,0.4)] active:scale-95 transition-all flex items-center justify-center gap-2 border border-white/20"
+                  className="relative z-10 w-full py-3.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-black uppercase tracking-widest text-xs shadow-[0_0_20px_rgba(79,70,229,0.4)] active:scale-95 transition-all flex items-center justify-center gap-2 border border-white/20 overflow-hidden"
                 >
-                  <span className="drop-shadow-sm">{profile?.currentPlan === previewTier.id ? 'Start Tasks Now' : 'Activate This Plan'}</span>
-                  <ArrowRight className="w-4 h-4 drop-shadow-sm" />
+                  {/* Repeating Tiny Zalando Hologram Pattern Overlay */}
+                  <div
+                    className="absolute inset-0 pointer-events-none rounded-xl z-0 animate-hologram opacity-40 select-none"
+                    style={{
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='20'%3E%3Ctext x='2' y='9' font-size='5.5' font-weight='900' fill='%23ffffff' font-family='sans-serif' letter-spacing='0.5' opacity='0.95'%3EZALANDO%3C/text%3E%3Ctext x='26' y='18' font-size='5.5' font-weight='900' fill='%23ffffff' font-family='sans-serif' letter-spacing='0.5' opacity='0.95'%3EZALANDO%3C/text%3E%3C/svg%3E"), linear-gradient(135deg, #FF007F 0%, #00F0FF 33%, #FFD700 66%, #FF007F 100%)`,
+                      backgroundSize: '48px 20px, 200% 200%',
+                      backgroundRepeat: 'repeat, no-repeat',
+                    }}
+                  />
+                  <span className="relative z-10 drop-shadow-sm">{profile?.currentPlan === previewTier.id ? 'Start Tasks Now' : 'Activate This Plan'}</span>
+                  <ArrowRight className="relative z-10 w-4 h-4 drop-shadow-sm" />
                 </button>
               </motion.div>
             </div>

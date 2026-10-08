@@ -1,7 +1,9 @@
 import { Jimp } from 'jimp';
 
+import path from 'path';
+
 async function inspectAndCrop() {
-  const inputPath = 'c:/Users/om shanti/Documents/ZalandoPro_App/public/latest_ref.jpg';
+  const inputPath = path.resolve(process.cwd(), 'public/latest_ref.jpg');
   const image = await Jimp.read(inputPath);
   
   console.log('Image dimensions:', image.bitmap.width, 'x', image.bitmap.height);
@@ -11,7 +13,7 @@ async function inspectAndCrop() {
   const heroHeight = Math.floor(image.bitmap.height * 0.495); // ~49.5% of total height
   
   const heroImage = image.clone().crop({ x: 0, y: 0, w: image.bitmap.width, h: heroHeight });
-  const heroOutputPath = 'c:/Users/om shanti/Documents/ZalandoPro_App/public/top_hero_seamless.jpg';
+  const heroOutputPath = path.resolve(process.cwd(), 'public/top_hero_seamless.jpg');
   await heroImage.write(heroOutputPath);
   console.log('Saved top_hero_seamless.jpg (height:', heroHeight, ')');
 }

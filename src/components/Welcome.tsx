@@ -41,7 +41,7 @@ export default function Welcome({ onComplete }: WelcomeProps) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="absolute inset-0 bg-white dark:bg-[#0B0C10] flex flex-col items-center justify-center p-8 text-center z-[100] overflow-hidden transition-colors duration-300"
+      className="absolute inset-0 bg-[#F5F3FF] dark:bg-[#0B0C10] flex flex-col items-center justify-center p-8 text-center z-[100] overflow-hidden transition-colors duration-300"
     >
       {/* Rich Background Accents */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-primary/5 dark:bg-primary/10 rounded-full"></div>

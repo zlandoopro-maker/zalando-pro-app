@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Loader2, X, FileText, Copy, Check, QrCode } from 'lucide-react';
 import { auth, db, handleFirestoreError, OperationType, parseUserProfile } from '../lib/firebase';
-import { doc, getDoc, collection, addDoc, onSnapshot, query, where, orderBy } from '../lib/firebase';
+import { doc, getDoc, collection, addDoc, onSnapshot } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 import { Screen, UserProfile } from '../types';
 import { startHumming } from '../lib/haptics';
 import { useNotification } from './NotificationProvider';
@@ -23,6 +24,7 @@ interface DepositRecord {
   amount: number;
   paymentMethod: string;
   orderId?: string;
+  nowpaymentsInvoiceId?: string;
   status: string;
   timestamp: string;
   remark?: string;
@@ -73,34 +75,98 @@ const NavAccountIcon = () => (
 function DepositRecordPage({ onBack }: { onBack: () => void }) {
   const [activeTab, setActiveTab] = useState<RecordStatus>('All');
   const [records, setRecords] = useState<DepositRecord[]>([]);
-  const [startDate, setStartDate] = useState('2022-09-15');
-  const [endDate, setEndDate]   = useState('2026-12-31');
+  const [liveStatuses, setLiveStatuses] = useState<Record<string, string>>({});
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 1);
+    return d.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate]   = useState(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() + 2);
+    return d.toISOString().split('T')[0];
+  });
 
+  // ── Fetch deposit records from Supabase (realtime) ──────────────────────
   useEffect(() => {
     if (!auth.currentUser) return;
-    const q = query(
-      collection(db, 'transactions'),
-      where('userId', '==', auth.currentUser.uid),
-      where('type', '==', 'deposit'),
-      orderBy('timestamp', 'desc')
-    );
-    const unsub = onSnapshot(q, snap => {
-      const rows: DepositRecord[] = snap.docs.map(d => {
-        const data = d.data();
-        return {
-          id:            d.id,
-          amount:        data.amount || 0,
-          paymentMethod: data.paymentMethod || 'usdt',
-          orderId:       data.orderId || '',
-          status:        data.status || 'pending',
-          timestamp:     data.timestamp || '',
-          remark:        data.remark || '',
-        };
-      });
+    const userId = auth.currentUser.uid;
+
+    const fetchRecords = async () => {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('type', 'deposit')
+        .order('timestamp', { ascending: false });
+
+      if (error) { console.error('[DepositRecord] Supabase error:', error); return; }
+
+      const rows: DepositRecord[] = (data || []).map(d => ({
+        id:                   d.id,
+        amount:               d.amount || 0,
+        paymentMethod:        d.payment_method || 'usdt',
+        orderId:              d.order_id || '',
+        nowpaymentsInvoiceId: d.nowpayments_invoice_id || '',
+        status:               d.status || 'pending',
+        timestamp:            d.timestamp || d.created_at || '',
+        remark:               d.rejection_reason || '',
+      }));
       setRecords(rows);
-    });
-    return () => unsub();
+    };
+
+    fetchRecords();
+
+    // Realtime — auto-updates when webhook changes status in DB
+    const channel = supabase
+      .channel(`deposit-records-${userId}`)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'transactions', filter: `user_id=eq.${userId}` },
+        () => { fetchRecords(); }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, []);
+
+  // ── Poll NOWPayments API for live status (frontend UI fallback) ───────────
+  // Webhook is the primary mechanism. This gives immediate visual feedback.
+  useEffect(() => {
+    // ✅ FIX: Use nowpaymentsInvoiceId for polling, NOT orderId (which is the Supabase UUID)
+    const pendingNowPayments = records.filter(
+      r => r.paymentMethod === 'nowpayments' && r.status === 'pending' && r.nowpaymentsInvoiceId
+    );
+    if (pendingNowPayments.length === 0) return;
+
+    let mounted = true;
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+    const checkStatuses = async () => {
+      for (const record of pendingNowPayments) {
+        try {
+          const res = await fetch(`${baseUrl}/api/crypto-pay/status/${record.nowpaymentsInvoiceId}`, {
+            headers: {
+              'Bypass-Tunnel-Reminder': 'true',
+              'ngrok-skip-browser-warning': 'true'
+            }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.payment_status && mounted) {
+              setLiveStatuses(prev => ({ ...prev, [record.id]: data.payment_status }));
+            }
+          }
+        } catch (e) {
+          // Silently ignore — webhook handles persistence
+        }
+      }
+    };
+
+    checkStatuses();
+    const interval = setInterval(checkStatuses, 10000);
+
+    return () => { mounted = false; clearInterval(interval); };
+  }, [records]);
 
   const statusMap: Record<string, RecordStatus> = {
     pending:   'Reviewing',
@@ -200,14 +266,38 @@ function DepositRecordPage({ onBack }: { onBack: () => void }) {
           </div>
         ) : (
           <>
-            {filteredRecords.map(record => (
+            {filteredRecords.map(record => {
+              const liveStatusRaw = liveStatuses[record.id];
+              let displayStatus = statusDisplayMap[record.status] || record.status;
+              let statusColor = PRIMARY;
+
+              if (liveStatusRaw) {
+                if (['finished', 'sending'].includes(liveStatusRaw)) {
+                  displayStatus = 'Passed (Auto)';
+                  statusColor = '#26A17B';
+                } else if (['failed', 'expired', 'refunded'].includes(liveStatusRaw)) {
+                  displayStatus = 'Rejected (Auto)';
+                  statusColor = '#EF0027';
+                } else {
+                  displayStatus = 'Waiting Payment';
+                  statusColor = '#F59E0B';
+                }
+              } else if (record.status === 'passed' || record.status === 'completed') {
+                statusColor = '#26A17B';
+              } else if (record.status === 'failed' || record.status === 'rejected') {
+                statusColor = '#EF0027';
+              }
+
+              const methodLabel = record.paymentMethod === 'binance' ? 'Binance Pay' : 
+                                  record.paymentMethod === 'nowpayments' ? 'NOWPayments (Crypto)' : 'USDT-TRC-20';
+
+              return (
               <div key={record.id} style={{ background: '#fff', borderRadius: 14, padding: '16px 18px',
                 marginBottom: 12, boxShadow: '0 2px 10px rgba(0,0,0,0.07)', border: '1px solid #EEEEF8' }}>
                 {[
-                  { label: 'Deposit status',  value: statusDisplayMap[record.status] || record.status,
-                    valueColor: PRIMARY, valueBold: true },
+                  { label: 'Deposit status',  value: displayStatus, valueColor: statusColor, valueBold: true },
                   { label: 'Deposit amount',  value: `$${record.amount.toFixed(2)}`, valueColor: '#26A17B', valueBold: true },
-                  { label: 'Payment method',  value: record.paymentMethod === 'binance' ? 'Binance Pay' : 'USDT-TRC-20', valueColor: '#333' },
+                  { label: 'Payment method',  value: methodLabel, valueColor: '#333' },
                   { label: 'Order / TxID',    value: record.orderId || 'N/A',        valueColor: '#555', small: true },
                   { label: 'Deposit time',    value: formatTs(record.timestamp),     valueColor: '#888', small: true },
                   { label: 'Remark',          value: record.remark || '',            valueColor: '#888' },
@@ -225,7 +315,7 @@ function DepositRecordPage({ onBack }: { onBack: () => void }) {
                   )
                 )}
               </div>
-            ))}
+            )})}
 
             <div style={{ textAlign: 'center', padding: '20px 0' }}>
               <span style={{ fontSize: 12, color: '#CCC', letterSpacing: 2 }}>— — — No more — — —</span>
@@ -248,12 +338,15 @@ export default function Deposit({ onBack, onKyc, onNavigate }: DepositProps) {
   const [walletAddress, setWalletAddress] = useState('');
   const [depositQrUrl, setDepositQrUrl]   = useState('');
   const [userUsdtAddress, setUserUsdtAddress] = useState('');
-  const [method, setMethod]   = useState<'usdt' | 'binance'>('binance');
+  const [method, setMethod]   = useState<'usdt' | 'binance' | 'nowpayments'>('nowpayments');
   const [orderId, setOrderId] = useState('');
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [binanceId, setBinanceId] = useState('');
   const [binanceQrUrl, setBinanceQrUrl] = useState('');
   const [showRecord, setShowRecord] = useState(false);
+
+  // NowPayments state
+  const [nowPaymentsData, setNowPaymentsData] = useState<{ pay_address: string, pay_amount: number, pay_currency: string, invoice_url?: string } | null>(null);
 
   const presets = [50, 100, 300, 800, 2000, 5000];
 
@@ -300,11 +393,89 @@ export default function Deposit({ onBack, onKyc, onNavigate }: DepositProps) {
   const handleDecrease = () => setAmount(prev => Math.max(10, prev - 10));
   const handleIncrease = () => setAmount(prev => prev + 10);
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (amount < 10) {
       showNotification("Minimum deposit amount is $10.", { type: 'error', title: 'INVALID AMOUNT' });
       return;
     }
+    if (method === 'usdt' && !userUsdtAddress) {
+      showNotification("Please link your USDT TRC-20 wallet address first.", { type: 'error', title: 'LINK WALLET REQUIRED' });
+      if (onNavigate) onNavigate('linked-mobile');
+      return;
+    }
+
+    if (method === 'nowpayments') {
+      if (!auth.currentUser) return;
+      setProcessing(true);
+      // ✅ Immediately switch to payment page — user sees spinning logo
+      setStep('payment');
+
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
+      let supabaseTransactionId: string | null = null;
+
+      try {
+        // Step 1: Insert pending transaction in Supabase
+        let inserted;
+        try {
+          const res = await supabase
+            .from('transactions')
+            .insert({
+              user_id: auth.currentUser.uid,
+              amount: amount,
+              status: 'pending',
+              type: 'deposit',
+              payment_method: 'nowpayments',
+              timestamp: new Date().toISOString()
+            })
+            .select()
+            .single();
+          if (res.error) throw res.error;
+          inserted = res.data;
+        } catch (e: any) {
+          throw new Error('Supabase DB Error: ' + e.message);
+        }
+        
+        if (!inserted) throw new Error('Failed to create transaction record');
+        supabaseTransactionId = inserted.id;
+
+        // Step 2: Create NOWPayments invoice via Express backend
+        let data;
+        try {
+          const res = await fetch(`${apiUrl}/api/crypto-pay/create`, {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Bypass-Tunnel-Reminder': 'true',
+              'ngrok-skip-browser-warning': 'true'
+            },
+            body: JSON.stringify({
+              amount,
+              userId: auth.currentUser.uid,
+              supabaseTransactionId
+            })
+          });
+          data = await res.json();
+          if (!res.ok) throw new Error(data.error?.message || 'Failed to generate payment.');
+        } catch (e: any) {
+          throw new Error('Backend API Error: ' + e.message);
+        }
+
+        // Invoice ready — logo will stop spinning
+        setNowPaymentsData(data);
+      } catch (err: any) {
+        console.error('[NOWPayments] Error:', err);
+        if (supabaseTransactionId) {
+          await supabase.from('transactions').delete().eq('id', supabaseTransactionId).eq('status', 'pending');
+        }
+        showNotification(`[URL: ${apiUrl}] ` + (err.message || 'Error generating NOWPayments invoice'), { type: 'error' });
+        // ✅ Go back to select step on error
+        setStep('select');
+      } finally {
+        setProcessing(false);
+      }
+      return;
+    }
+
     setStep('payment');
   };
 
@@ -385,7 +556,7 @@ export default function Deposit({ onBack, onKyc, onNavigate }: DepositProps) {
         <div style={{ flex: 1, textAlign: 'center' }}>
           <span style={{ fontSize: 17, fontWeight: 800, fontStyle: 'italic',
             color: '#111', letterSpacing: 1, textTransform: 'uppercase' }}>
-            {step === 'select' ? 'DEPOSIT' : (method === 'usdt' ? 'CRYPTO PAYMENT' : 'BINANCE PAYMENT')}
+            {step === 'select' ? 'DEPOSIT' : (method === 'usdt' ? 'CRYPTO PAYMENT' : method === 'nowpayments' ? 'AUTO CRYPTO DEPOSIT' : 'BINANCE PAYMENT')}
           </span>
         </div>
 
@@ -474,71 +645,53 @@ export default function Deposit({ onBack, onKyc, onNavigate }: DepositProps) {
                 Select Payment Method
               </span>
 
-              {/* Binance Pay */}
-              <div style={{ position: 'relative', paddingTop: 10 }}>
-                <div style={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 2 }}>
-                  <span style={{ background: 'linear-gradient(90deg, #F59E0B, #F0B90B)', color: '#fff', fontSize: 9,
-                    fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, padding: '3px 10px', borderRadius: 20,
-                    boxShadow: '0 2px 8px rgba(240,185,11,0.4)', whiteSpace: 'nowrap' }}>
-                    ⚡ Recommended For Fast Deposit
-                  </span>
-                </div>
-                <button onClick={() => setMethod('binance')}
-                  style={{ width: '100%', borderRadius: 16, padding: '16px 18px', display: 'flex', alignItems: 'center',
-                    justifyContent: 'space-between', background: '#fff', border: method === 'binance' ? '2px solid #F0B90B' : '1px solid #EEEEF8',
-                    cursor: 'pointer', boxShadow: method === 'binance' ? '0 4px 16px rgba(240,185,11,0.2)' : '0 2px 10px rgba(0,0,0,0.06)' }}>
+              {/* NowPayments (Non-Custodial Auto) */}
+              <button onClick={() => setMethod('nowpayments')}
+                style={{ width: '100%', borderRadius: 16, padding: '18px', display: 'flex', flexDirection: 'column', gap: 14,
+                  background: 'linear-gradient(145deg, #1A1B23 0%, #2A2D3E 100%)', border: '2px solid #5B5BD6',
+                  cursor: 'pointer', boxShadow: '0 8px 24px rgba(91,91,214,0.3)', position: 'relative', overflow: 'hidden' }}>
+                
+                {/* Shine effect overlay */}
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '100%', 
+                  background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent)',
+                  transform: 'skewX(-20deg) translateX(-100%)', animation: 'shine 3s infinite' }} />
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#000', display: 'flex',
-                      alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.2)' }}>
-                      <svg viewBox="0 0 201 201" width="26" height="26">
-                        <path fill="#F3BA2F" d="M126.452 111.118L141.537 126.159L100.531 167.121L59.5688 126.159L74.6533 111.118L100.531 136.995L126.452 111.118ZM100.531 85.1965L115.832 100.498L100.531 115.799L85.2732 100.541V100.498L87.9607 97.8103L89.2611 96.5099L100.531 85.1965ZM48.949 85.4133L64.0335 100.498L48.949 115.539L33.8644 100.454L48.949 85.4133ZM152.113 85.4133L167.198 100.498L152.113 115.539L137.029 100.454L152.113 85.4133ZM100.531 33.8311L141.493 74.7934L126.409 89.8779L100.531 63.9568L74.6533 89.8346L59.5688 74.7934L100.531 33.8311Z"/>
-                      </svg>
+                    <div style={{ width: 48, height: 48, borderRadius: '14px', display: 'flex',
+                      alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <img src="/zalando-logo.png" alt="Zalando Pro" style={{ width: 48, height: 48, objectFit: 'contain', borderRadius: '14px' }} />
                     </div>
                     <div style={{ textAlign: 'left' }}>
-                      <span style={{ display: 'block', fontSize: 14, fontWeight: 800, fontStyle: 'italic', color: '#111', textTransform: 'uppercase' }}>
-                        Binance Pay
+                      <span style={{ display: 'block', fontSize: 16, fontWeight: 900, fontStyle: 'italic', color: '#FFF', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                        Crypto Gateway
                       </span>
-                      <span style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#F59E0B', textTransform: 'uppercase', letterSpacing: 1 }}>
-                        Fast & Zero Fee
+                      <span style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#3BBFEF', textTransform: 'uppercase', letterSpacing: 1, marginTop: 2 }}>
+                        Powered by NOWPayments
                       </span>
                     </div>
                   </div>
-                  {method === 'binance' && (
-                    <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#F0B90B', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Check style={{ width: 14, height: 14, color: '#fff' }} />
-                    </div>
-                  )}
-                </button>
-              </div>
-
-              {/* USDT-TRC-20 */}
-              <button onClick={() => setMethod('usdt')}
-                style={{ width: '100%', borderRadius: 16, padding: '16px 18px', display: 'flex', alignItems: 'center',
-                  justifyContent: 'space-between', background: '#fff', border: method === 'usdt' ? '2px solid #26A17B' : '1px solid #EEEEF8',
-                  cursor: 'pointer', boxShadow: method === 'usdt' ? '0 4px 16px rgba(38,161,123,0.2)' : '0 2px 10px rgba(0,0,0,0.06)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#26A17B', display: 'flex',
-                    alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(38,161,123,0.3)' }}>
-                    <svg viewBox="0 0 48 48" width="24" height="24" fill="none">
-                      <rect x="6" y="9" width="36" height="7" rx="3.5" fill="white"/>
-                      <rect x="19.5" y="14" width="9" height="18" fill="white"/>
-                      <rect x="10" y="30" width="28" height="6" rx="3" fill="white" opacity="0.85"/>
-                    </svg>
-                  </div>
-                  <div style={{ textAlign: 'left' }}>
-                    <span style={{ display: 'block', fontSize: 14, fontWeight: 800, fontStyle: 'italic', color: '#111', textTransform: 'uppercase' }}>
-                      USDT-TRC-20
-                    </span>
-                    <span style={{ display: 'block', fontSize: 10, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: 1 }}>
-                      Stablecoin Payment
-                    </span>
+                  <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#5B5BD6', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff' }}>
+                    <Check style={{ width: 14, height: 14, color: '#fff', strokeWidth: 3 }} />
                   </div>
                 </div>
-                {method === 'usdt' && (
-                  <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#26A17B', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Check style={{ width: 14, height: 14, color: '#fff' }} />
+
+                <div style={{ width: '100%', height: 1, background: 'rgba(255,255,255,0.1)' }} />
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <span style={{ fontSize: 11, color: '#A0A4B8', fontWeight: 600 }}>Supports 300+ Cryptocurrencies</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: -6 }}>
+                    {/* Crypto icons (BTC, ETH, USDT, TRX) */}
+                    {['#F7931A', '#627EEA', '#26A17B', '#EF0027'].map((color, i) => (
+                      <div key={i} style={{ width: 22, height: 22, borderRadius: '50%', background: color, border: '2px solid #2A2D3E', marginLeft: i > 0 ? -6 : 0, zIndex: 4-i, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {i === 0 && <span style={{color: '#fff', fontSize: 12, fontWeight: 800}}>₿</span>}
+                        {i === 1 && <span style={{color: '#fff', fontSize: 14, fontWeight: 800}}>♦</span>}
+                        {i === 2 && <span style={{color: '#fff', fontSize: 10, fontWeight: 800}}>₮</span>}
+                        {i === 3 && <svg viewBox="0 0 32 32" width="10" height="10"><path d="M16 2L30 28H2L16 2Z" fill="white"/></svg>}
+                      </div>
+                    ))}
                   </div>
-                )}
+                </div>
               </button>
             </div>
 
@@ -556,79 +709,144 @@ export default function Deposit({ onBack, onKyc, onNavigate }: DepositProps) {
               <p style={{ fontSize: 13, color: '#666', lineHeight: 1.7, margin: 0 }}>
                 a) Minimum deposit amount is $10.<br/>
                 b) Deposit processing may take up to 30 minutes<br/>
-                &nbsp;&nbsp;&nbsp;depending on network congestion.<br/>
-                c) {method === 'usdt' ? 'Please ensure you use TRC-20 network to avoid loss.' : 'Please use the Binance Pay ID provided for zero fees.'}
+                &nbsp;&nbsp;&nbsp;depending on the blockchain network.<br/>
+                c) You can pay with USDT, BTC, ETH, TRX, and 300+ other cryptocurrencies in one single checkout.
               </p>
               <p style={{ fontSize: 13, fontWeight: 700, color: '#444', margin: '14px 0 6px 0' }}>Note</p>
               <p style={{ fontSize: 13, color: '#666', lineHeight: 1.7, margin: 0 }}>
-                Do not deposit any other assets to the provided address. If you encounter any issues, please contact customer support.
+                Click Confirm to be securely redirected to the official NOWPayments gateway. Your balance will be credited automatically upon confirmation.
               </p>
             </div>
           </motion.div>
         ) : (
           <motion.div key="payment" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}
-            style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+            style={{ flex: 1, overflowY: 'auto', padding: '24px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
 
-            <div style={{ textAlign: 'center', marginTop: 12 }}>
-              <p style={{ fontSize: 12, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 4px 0' }}>
-                Amount to pay
+            {/* Amount Section with a glowing badge */}
+            <div style={{ textAlign: 'center', marginTop: 10, background: 'linear-gradient(180deg, rgba(91,91,214,0.06) 0%, transparent 100%)', width: '100%', borderRadius: 24, padding: '24px 10px 10px' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: processing ? 'rgba(245,158,11,0.1)' : 'rgba(38,161,123,0.1)', padding: '6px 12px', borderRadius: 20, marginBottom: 12, transition: 'background 0.3s' }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: processing ? '#F59E0B' : '#26A17B', animation: 'pulse 2s infinite' }} />
+                <span style={{ fontSize: 11, fontWeight: 800, color: processing ? '#F59E0B' : '#26A17B', textTransform: 'uppercase', letterSpacing: 1 }}>
+                  {processing ? 'Generating Invoice' : 'Connection Secure'}
+                </span>
+              </div>
+              <p style={{ fontSize: 12, fontWeight: 800, color: '#888', textTransform: 'uppercase', letterSpacing: 1.5, margin: '0 0 8px 0' }}>
+                Total Payment
               </p>
-              <div style={{ fontSize: 44, fontWeight: 900, fontStyle: 'italic', color: PRIMARY }}>
+              <div style={{ fontSize: 52, fontWeight: 900, fontStyle: 'italic', color: '#111', lineHeight: 1 }}>
                 ${amount.toFixed(2)}
               </div>
             </div>
 
-            {/* QR Card */}
-            <div style={{ background: '#fff', borderRadius: 20, padding: 24, boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-              border: '1px solid #EEEEF8', width: '100%', maxWidth: 340, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              
-              <div style={{ width: 200, height: 200, background: '#fff', borderRadius: 16, display: 'flex',
-                alignItems: 'center', justifyContent: 'center', marginBottom: 20, border: '1px solid #F0F0F8', overflow: 'hidden' }}>
-                {method === 'usdt' ? (
-                  depositQrUrl ? (
-                    <img src={depositQrUrl} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="Deposit QR" />
-                  ) : (
-                    <QRCodeSVG value={walletAddress} size={180} />
-                  )
-                ) : (
-                  binanceQrUrl ? (
-                    <img src={binanceQrUrl} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="Binance Pay QR" />
-                  ) : (
-                    <QRCodeSVG value={binanceId} size={180} />
-                  )
-                )}
-              </div>
+            {/* ── PROCESSING STATE: Spinning Logo ── */}
+            {method === 'nowpayments' && processing && !nowPaymentsData?.invoice_url && (
+              <div style={{ width: '100%', maxWidth: 360, background: 'linear-gradient(145deg, #1A1B23 0%, #2A2D3E 100%)',
+                borderRadius: 24, padding: '48px 24px', boxShadow: '0 12px 30px rgba(0,0,0,0.15)',
+                border: '1px solid rgba(255,255,255,0.08)', position: 'relative', overflow: 'hidden', textAlign: 'center' }}>
 
-              <div style={{ width: '100%' }}>
-                <p style={{ fontSize: 11, fontWeight: 800, fontStyle: 'italic', color: '#888',
-                  textTransform: 'uppercase', letterSpacing: 1, textAlign: 'center', marginBottom: 8 }}>
-                  {method === 'usdt' ? 'Transfer Address (USDT TRC-20)' : 'Binance Pay ID'}
-                </p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
-                  background: '#F5F5FA', borderRadius: 12, border: '1px solid #EEEEF8' }}>
-                  <p style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: '#333',
-                    flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
-                    {method === 'usdt' ? walletAddress : binanceId}
+                {/* Background glow */}
+                <div style={{ position: 'absolute', top: '-50%', left: '-50%', width: '200%', height: '200%',
+                  background: 'radial-gradient(circle, rgba(91,91,214,0.2) 0%, transparent 50%)', zIndex: 0, animation: 'pulse 3s infinite' }} />
+
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  {/* Spinning Logo */}
+                  <div style={{ width: 100, height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', position: 'relative' }}>
+                    <img
+                      src="/zalando-logo.png"
+                      alt="Zalando Pro"
+                      style={{
+                        width: 100,
+                        height: 100,
+                        objectFit: 'contain',
+                        animation: 'spin-logo 1.5s linear infinite',
+                        filter: 'drop-shadow(0 0 20px rgba(91,91,214,0.6))'
+                      }}
+                    />
+                    {/* Outer ring pulse */}
+                    <div style={{ position: 'absolute', inset: -8, borderRadius: '50%', border: '2px solid rgba(91,91,214,0.3)', animation: 'ping 2s infinite' }} />
+                    <div style={{ position: 'absolute', inset: -16, borderRadius: '50%', border: '1px solid rgba(59,191,239,0.2)', animation: 'ping 2.5s infinite 0.5s' }} />
+                  </div>
+
+                  <h3 style={{ fontSize: 18, fontWeight: 900, color: '#fff', margin: '0 0 8px', letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                    Generating Your Invoice
+                  </h3>
+                  <p style={{ fontSize: 13, color: '#A0A4B8', lineHeight: 1.6, margin: '0 0 20px' }}>
+                    Connecting to secure payment gateway<span style={{ animation: 'dots 1.5s steps(4) infinite' }}>...</span>
                   </p>
-                  <button onClick={() => {
-                    navigator.clipboard.writeText(method === 'usdt' ? walletAddress : binanceId);
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 2000);
-                  }} style={{ background: '#fff', border: 'none', borderRadius: 8, padding: 6,
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                    {copied ? <Check style={{ width: 18, height: 18, color: '#26A17B' }} /> : <Copy style={{ width: 18, height: 18, color: PRIMARY }} />}
+
+                  {/* Progress bar animation */}
+                  <div style={{ width: '100%', height: 3, background: 'rgba(255,255,255,0.08)', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', background: 'linear-gradient(90deg, #5B5BD6, #3BBFEF)', borderRadius: 4, width: '60%', animation: 'loading-bar 2s ease-in-out infinite' }} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── READY STATE: Still Logo + Invoice Card ── */}
+            {method === 'nowpayments' && nowPaymentsData?.invoice_url && (
+              <div style={{ width: '100%', maxWidth: 360, background: 'linear-gradient(145deg, #1A1B23 0%, #2A2D3E 100%)',
+                borderRadius: 24, padding: '32px 24px', boxShadow: '0 12px 30px rgba(0,0,0,0.15)',
+                border: '1px solid rgba(255,255,255,0.08)', position: 'relative', overflow: 'hidden', textAlign: 'center' }}>
+
+                {/* Background glow */}
+                <div style={{ position: 'absolute', top: '-50%', left: '-50%', width: '200%', height: '200%',
+                  background: 'radial-gradient(circle, rgba(91,91,214,0.15) 0%, transparent 50%)', zIndex: 0 }} />
+
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  {/* Still Logo */}
+                  <div style={{ width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', position: 'relative' }}>
+                    <img
+                      src="/zalando-logo.png"
+                      alt="Zalando Pro"
+                      style={{
+                        width: 72,
+                        height: 72,
+                        objectFit: 'contain',
+                        filter: 'drop-shadow(0 4px 12px rgba(91,91,214,0.4))'
+                      }}
+                    />
+                  </div>
+
+                  <h3 style={{ fontSize: 20, fontWeight: 900, color: '#fff', margin: '0 0 8px', letterSpacing: 0.5 }}>
+                    INVOICE READY
+                  </h3>
+                  <p style={{ fontSize: 13, color: '#A0A4B8', lineHeight: 1.6, margin: '0 0 24px' }}>
+                    Your secure payment gateway has been generated. You can pay using <strong style={{color: '#fff'}}>USDT, BTC, ETH</strong>, or 300+ other coins.
+                  </p>
+
+                  <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 12, padding: '14px', border: '1px solid rgba(255,255,255,0.05)', marginBottom: 24 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <span style={{ fontSize: 12, color: '#888' }}>Order ID</span>
+                      <span style={{ fontSize: 12, color: '#fff', fontWeight: 600, fontFamily: 'monospace' }}>
+                        {nowPaymentsData?.id ? String(nowPaymentsData.id) : `DEP_${auth.currentUser?.uid?.substring(0,6).toUpperCase() || 'XXXXX'}_${Date.now().toString().slice(-4)}`}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 12, color: '#888' }}>Network Fee</span>
+                      <span style={{ fontSize: 12, color: '#26A17B', fontWeight: 700 }}>Calculated at checkout</span>
+                    </div>
+                  </div>
+
+                  <button onClick={() => window.open(nowPaymentsData.invoice_url, '_self')}
+                    style={{ width: '100%', padding: '16px 0', borderRadius: 14,
+                      background: 'linear-gradient(90deg, #5B5BD6, #7C7CE0)', color: '#fff', border: 'none', cursor: 'pointer',
+                      fontSize: 16, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1,
+                      boxShadow: '0 8px 20px rgba(91,91,214,0.4)', transition: 'transform 0.2s', position: 'relative', overflow: 'hidden' }}>
+                    <span style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0110 0v4"></path></svg>
+                      Proceed to Checkout
+                    </span>
                   </button>
                 </div>
               </div>
-            </div>
+            )}
 
-            <button onClick={handleDepositComplete} disabled={processing}
-              style={{ width: '100%', maxWidth: 340, padding: '15px 0', borderRadius: 12,
-                background: '#26A17B', color: '#fff', border: 'none', cursor: 'pointer',
-                fontSize: 16, fontWeight: 700, boxShadow: '0 4px 16px rgba(38,161,123,0.4)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 12 }}>
-              {processing ? <Loader2 style={{ width: 22, height: 22, animation: 'spin 1s linear infinite' }} /> : 'I have made deposit'}
-            </button>
+            {method === 'nowpayments' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.7 }}>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                <span style={{ fontSize: 12, color: '#666', fontWeight: 700, letterSpacing: 0.5 }}>Secured by SSL & NOWPayments</span>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -692,6 +910,28 @@ export default function Deposit({ onBack, onKyc, onNavigate }: DepositProps) {
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes shine {
+          0% { transform: skewX(-20deg) translateX(-200%); }
+          50% { transform: skewX(-20deg) translateX(200%); }
+          100% { transform: skewX(-20deg) translateX(200%); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(0.8); }
+        }
+        @keyframes ping {
+          0% { transform: scale(1); opacity: 1; }
+          100% { transform: scale(1.5); opacity: 0; }
+        }
+        @keyframes spin-logo {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        @keyframes loading-bar {
+          0% { transform: translateX(-100%); width: 40%; }
+          50% { transform: translateX(60%); width: 60%; }
+          100% { transform: translateX(200%); width: 40%; }
+        }
       `}</style>
     </motion.div>
   );

@@ -14,6 +14,7 @@ const LANGUAGES = [
 
 interface LanguagePageProps {
   onBack: () => void;
+  key?: string;
 }
 
 export default function LanguagePage({ onBack }: LanguagePageProps) {
@@ -30,10 +31,10 @@ export default function LanguagePage({ onBack }: LanguagePageProps) {
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="h-[100dvh] bg-slate-50 dark:bg-[#0B0C10] flex flex-col overflow-y-auto scroll-container"
+      className="min-h-[100dvh] w-full bg-[#F5F3FF] dark:bg-[#0B0C10] flex flex-col overflow-y-auto scroll-container"
     >
       {/* Header */}
-      <div className="bg-white dark:bg-[#15171B] p-6 pt-[max(2.5rem,env(safe-area-inset-top,0px))] flex items-center gap-4 border-b border-slate-100 dark:border-slate-800">
+      <div className="bg-[#F7F5FF] dark:bg-[#15171B] p-6 pt-[max(2.5rem,env(safe-area-inset-top,0px))] flex items-center gap-4 border-b border-[#E8E4FF] dark:border-slate-800">
         <button 
           onClick={onBack}
           className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
@@ -53,7 +54,7 @@ export default function LanguagePage({ onBack }: LanguagePageProps) {
       {/* Content */}
       <div className="flex-1 p-6 space-y-4">
         <div className="bg-primary/5 dark:bg-primary/10 p-6 rounded-3xl border border-primary/10 mb-6 flex items-center gap-5">
-           <div className="w-16 h-16 bg-white dark:bg-[#1C1E24] rounded-2xl flex items-center justify-center shadow-lg">
+           <div className="w-16 h-16 bg-[#F0EDFF] dark:bg-[#1C1E24] rounded-2xl flex items-center justify-center shadow-lg">
               <Globe className="w-8 h-8 text-primary" />
            </div>
            <div>
@@ -72,7 +73,7 @@ export default function LanguagePage({ onBack }: LanguagePageProps) {
                 className={`w-full flex items-center justify-between p-5 rounded-3xl border-2 transition-all active:scale-[0.98] ${
                   isSelected
                     ? 'border-primary bg-white dark:bg-[#1C1E24] shadow-xl shadow-primary/10'
-                    : 'border-transparent bg-white dark:bg-[#15171B] hover:bg-slate-50 dark:hover:bg-white/5'
+                    : 'border-transparent bg-[#F0EDFF] dark:bg-[#15171B] hover:bg-[#F7F5FF] dark:hover:bg-white/5'
                 }`}
               >
                 <div className="flex items-center gap-5">

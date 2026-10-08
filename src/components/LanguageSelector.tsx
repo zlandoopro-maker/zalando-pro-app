@@ -29,7 +29,7 @@ export default function LanguageSelector() {
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="flex items-center gap-2 px-4 py-2.5 bg-slate-50 dark:bg-[#1C1E24] hover:bg-slate-100 dark:hover:bg-[#252830] border-2 border-slate-200 dark:border-slate-800/50 rounded-2xl shadow-sm transition-all active:scale-95"
+        className="flex items-center gap-2 px-4 py-2.5 bg-[#F0EDFF] dark:bg-[#1C1E24] hover:bg-[#F7F5FF] dark:hover:bg-[#252830] border-2 border-[#E8E4FF] dark:border-slate-800/50 rounded-2xl shadow-sm transition-all active:scale-95"
       >
         <Globe className="w-5 h-5 text-primary dark:text-[#A1E3E8]" />
         <span className="text-sm font-black text-slate-800 dark:text-white uppercase">{currentLanguage.code}</span>
@@ -48,7 +48,7 @@ export default function LanguageSelector() {
                 exit={{ scale: 0.9, opacity: 0, y: 20 }}
                 transition={{ type: 'spring', damping: 25, stiffness: 300 }}
                 onClick={(e) => e.stopPropagation()}
-                className="bg-white dark:bg-[#1C1E24] w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl border border-slate-100 dark:border-slate-800"
+                className="bg-[#F0EDFF] dark:bg-[#1C1E24] w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl border border-[#E8E4FF] dark:border-slate-800"
               >
                 {/* Header */}
                 <div className="text-center mb-8">
@@ -72,7 +72,7 @@ export default function LanguageSelector() {
                         className={`w-full flex items-center justify-between p-5 rounded-3xl border-2 transition-all active:scale-95 ${
                           isSelected
                             ? 'border-primary bg-primary/5 dark:bg-primary/10 shadow-lg shadow-primary/5'
-                            : 'border-transparent bg-slate-50 dark:bg-black/20 hover:bg-slate-100 dark:hover:bg-black/40'
+                            : 'border-transparent bg-[#EAE7FF] dark:bg-black/20 hover:bg-[#F0EDFF] dark:hover:bg-black/40'
                         }`}
                       >
                         <div className="flex items-center gap-5">

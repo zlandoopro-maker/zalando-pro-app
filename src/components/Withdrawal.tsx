@@ -317,6 +317,7 @@ export default function Withdrawal({ onBack }: WithdrawalProps) {
   const [showRecord, setShowRecord]   = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
+  const [planPurchaseDate, setPlanPurchaseDate] = useState<string | null>(null);
 
   const presets = [10, 50, 100];
 
@@ -330,6 +331,7 @@ export default function Withdrawal({ onBack }: WithdrawalProps) {
           setBalance(d.balance || 0);
           if (d.usdtAddress) { setWalletAddress(d.usdtAddress); setIsAddressLinked(true); }
           if (d.binanceId)   { setBinanceId(d.binanceId);   setIsBinanceLinked(true); }
+          if (d.planPurchaseDate) { setPlanPurchaseDate(d.planPurchaseDate); }
         }
       } catch (err) { handleFirestoreError(err, OperationType.GET, `users/${auth.currentUser?.uid}`); }
     };
@@ -365,14 +367,28 @@ export default function Withdrawal({ onBack }: WithdrawalProps) {
       showNotification('Minimum withdrawal amount is $10.', { type: 'error', title: 'INVALID AMOUNT' });
       return;
     }
-    if (!walletAddress.trim()) {
-      showNotification('Please link your USDT TRC-20 address first.', { type: 'error' }); return;
-    }
-    const totalDeduction = amount * 1.05;
+
     setProcessing(true);
     try {
       const isOk = await verifyClockIntegrity(showNotification);
       if (!isOk) { setProcessing(false); return; }
+
+      if (planPurchaseDate) {
+        const purchaseMs = new Date(planPurchaseDate).getTime();
+        const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+        if (Date.now() - purchaseMs < threeDaysMs) {
+          showNotification('You can only withdraw 3 days after choosing a plan.', { type: 'error', title: 'PLEASE WAIT' });
+          setProcessing(false);
+          return;
+        }
+      }
+
+      if (!walletAddress.trim()) {
+        showNotification('Please link your USDT TRC-20 address first.', { type: 'error' });
+        setProcessing(false);
+        return;
+      }
+      const totalDeduction = amount * 1.05;
 
       const serverMs = Date.now();
       const nowIso   = new Date(serverMs).toISOString();

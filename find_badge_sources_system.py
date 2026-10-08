@@ -1,10 +1,9 @@
 import os
 
+from pathlib import Path
+
 search_paths = [
-    r"c:\Users\om shanti\Documents\ZalandoPro_App",
-    r"c:\Users\om shanti\.gemini",
-    r"c:\Users\om shanti\Downloads",
-    r"c:\Users\om shanti\Desktop"
+    str(Path(__file__).parent)
 ]
 
 for base in search_paths:

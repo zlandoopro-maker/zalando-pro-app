@@ -55,7 +55,7 @@ export default function SecurityCenter({ onBack }: SecurityCenterProps) {
 
   if (loading) {
     return (
-      <div className="absolute inset-0 bg-white dark:bg-black z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-[#F5F3FF] dark:bg-black z-50 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-black dark:text-white" />
       </div>
     );
@@ -96,7 +96,7 @@ export default function SecurityCenter({ onBack }: SecurityCenterProps) {
       initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 1.02 }}
-      className="relative min-h-screen bg-white dark:bg-black pb-24 font-sans overflow-y-auto"
+      className="relative min-h-screen bg-[#F5F3FF] dark:bg-black pb-24 font-sans overflow-y-auto"
     >
       {/* Header */}
       <div 
@@ -104,7 +104,7 @@ export default function SecurityCenter({ onBack }: SecurityCenterProps) {
           backdropFilter: 'blur(20px) saturate(180%)',
           WebkitBackdropFilter: 'blur(20px) saturate(180%)'
         }}
-        className="safe-top sticky top-0 z-50 bg-white/60 dark:bg-black/60 border-b border-black/5 dark:border-white/10 px-4 py-3.5 flex items-center justify-between transition-all"
+        className="safe-top sticky top-0 z-50 bg-[#F7F5FF]/80 dark:bg-black/60 border-b border-black/5 dark:border-white/10 px-4 py-3.5 flex items-center justify-between transition-all"
       >
         <button
           onClick={onBack}
@@ -204,7 +204,7 @@ export default function SecurityCenter({ onBack }: SecurityCenterProps) {
             initial={{ opacity: 0, y: 100 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 100 }}
-            className="bg-white dark:bg-[#1d1d1f] w-full sm:max-w-md rounded-t-[2rem] sm:rounded-[2rem] p-6 pb-12 shadow-2xl"
+            className="bg-[#F5F3FF] dark:bg-[#1d1d1f] w-full sm:max-w-md rounded-t-[2rem] sm:rounded-[2rem] p-6 pb-12 shadow-2xl"
           >
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-xl font-bold text-black dark:text-white tracking-tight">Login Activity</h3>

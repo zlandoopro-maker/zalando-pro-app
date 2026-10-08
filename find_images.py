@@ -1,6 +1,7 @@
 import os
+from pathlib import Path
 
-workspace = r"c:\Users\om shanti\Documents\ZalandoPro_App"
+workspace = str(Path(__file__).parent)
 
 for root, dirs, files in os.walk(workspace):
     if "node_modules" in root or ".git" in root:
