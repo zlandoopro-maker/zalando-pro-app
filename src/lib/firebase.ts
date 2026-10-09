@@ -18,6 +18,9 @@ export function handleFirestoreError(...args: any[]) {
   console.error(`Database Operation Error [${operationType}] at [${path}]:`, error);
 }
 
+export const DB_BACKEND = 'SUPABASE';
+export const firebaseEnabled = false;
+
 export const resetAuthSystem = () => {
   localStorage.clear();
   sessionStorage.clear();
@@ -184,7 +187,11 @@ export async function deleteUser(..._args: any[]) {
 // DATABASE ADAPTER OVER SUPABASE
 // ---------------------------------------------------------------------------
 
-export const db = {};
+export const db = Object.freeze({
+  backend: 'supabase',
+  mode: 'compatibility-only',
+  isFirebase: false
+});
 
 export interface DocRef {
   type: 'doc';

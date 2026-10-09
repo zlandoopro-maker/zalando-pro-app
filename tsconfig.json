@@ -23,5 +23,15 @@
     "allowImportingTsExtensions": true,
     "types": ["vite/client"],
     "noEmit": true
-  }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "functions/**/*.ts",
+    "server/**/*.ts",
+    "vite.config.ts"
+  ],
+  "exclude": [
+    "supabase/functions/**"
+  ]
 }

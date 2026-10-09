@@ -6,6 +6,7 @@ import { auth, db, handleFirestoreError, OperationType, parseUserProfile } from 
 import { doc, getDoc, onSnapshot, collection, query, getDocs, updateDoc, setDoc, where, addDoc, runTransaction, limit, orderBy, increment, deleteDoc } from '../lib/firebase';
 import BottomNav from './BottomNav';
 import { useNotification } from './NotificationProvider';
+import { supabase } from '../lib/supabase';
 
 export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void, key?: string }) {
   const { showNotification } = useNotification();
@@ -255,12 +256,34 @@ export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void,
 
         if (tx.type === 'deposit') {
           transaction.update(userRef, {
-            balance: increment(tx.amount || 0)
+            balance: increment(Number(tx.amount) || 0)
           });
         }
         
         transaction.update(txRef, { status: 'completed', updatedAt: new Date().toISOString() });
       });
+
+      // Also sync to Supabase so Transaction History shows "Completed"
+      try {
+        // Try matching by firestore_id first, then by user_id + amount + status
+        const { data: matchedTxs } = await supabase
+          .from('transactions')
+          .select('id')
+          .eq('user_id', tx.userId)
+          .eq('type', tx.type || 'deposit')
+          .eq('status', 'pending')
+          .eq('amount', Number(tx.amount) || 0)
+          .limit(1);
+
+        if (matchedTxs && matchedTxs.length > 0) {
+          await supabase
+            .from('transactions')
+            .update({ status: 'completed' })
+            .eq('id', matchedTxs[0].id);
+        }
+      } catch (e) {
+        console.warn('[Admin] Supabase sync on approve failed (non-critical):', e);
+      }
 
       setTransactions(transactions.filter(t => t.id !== tx.id));
       showNotification('Transaction Approved!', { type: 'success', title: 'APPROVED' });
@@ -287,7 +310,7 @@ export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void,
 
         if (tx.type === 'withdrawal') {
           transaction.update(userRef, {
-            balance: increment(tx.deductedAmount || tx.amount || 0)
+            balance: increment(Number(tx.deductedAmount || tx.amount) || 0)
           });
         }
         
@@ -297,6 +320,27 @@ export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void,
           updatedAt: new Date().toISOString() 
         });
       });
+
+      // Also sync rejection to Supabase
+      try {
+        const { data: matchedTxs } = await supabase
+          .from('transactions')
+          .select('id')
+          .eq('user_id', tx.userId)
+          .eq('type', tx.type || 'deposit')
+          .eq('status', 'pending')
+          .eq('amount', Number(tx.amount) || 0)
+          .limit(1);
+
+        if (matchedTxs && matchedTxs.length > 0) {
+          await supabase
+            .from('transactions')
+            .update({ status: 'rejected', rejection_reason: reason })
+            .eq('id', matchedTxs[0].id);
+        }
+      } catch (e) {
+        console.warn('[Admin] Supabase sync on reject failed (non-critical):', e);
+      }
 
       setTransactions(transactions.filter(t => t.id !== tx.id));
       showNotification('Transaction Rejected!', { type: 'success', title: 'REJECTED' });

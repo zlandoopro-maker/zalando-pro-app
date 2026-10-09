@@ -494,23 +494,45 @@ export default function Deposit({ onBack, onKyc, onNavigate }: DepositProps) {
     const stopHumming = startHumming();
     try {
       if (auth.currentUser) {
-        const depositRef = collection(db, 'transactions');
+        const txTimestamp = new Date().toISOString();
+        const txData = {
+          userId: auth.currentUser.uid,
+          amount: amount,
+          status: 'pending',
+          type: 'deposit',
+          paymentMethod: method,
+          orderId: orderId.trim(),
+          userUsdtAddress: userUsdtAddress,
+          timestamp: txTimestamp
+        };
+
+        // Write to Firestore (Admin Panel reads from here)
+        let firestoreDocId: string | null = null;
         try {
-          await addDoc(depositRef, {
-            userId: auth.currentUser.uid,
-            amount: amount,
-            status: 'pending',
-            type: 'deposit',
-            paymentMethod: method,
-            orderId: orderId.trim(),
-            userUsdtAddress: userUsdtAddress,
-            timestamp: new Date().toISOString()
-          });
+          const docRef = await addDoc(collection(db, 'transactions'), txData);
+          firestoreDocId = docRef.id;
           // Notify admin hub about new deposit
           notifyAdminOfRequest('deposit', amount);
         } catch (err) {
           handleFirestoreError(err, OperationType.CREATE, 'transactions');
         }
+
+        // Also write to Supabase (Transaction History reads from here)
+        try {
+          await supabase.from('transactions').insert({
+            user_id: auth.currentUser.uid,
+            amount: amount,
+            status: 'pending',
+            type: 'deposit',
+            payment_method: method,
+            order_id: orderId.trim(),
+            firestore_id: firestoreDocId,
+            timestamp: txTimestamp
+          });
+        } catch (e) {
+          console.warn('[Deposit] Supabase sync failed (non-critical):', e);
+        }
+
         showNotification(`Deposit request for $${amount} submitted! It will reflect in your balance after admin approval.`, { type: 'success', title: 'SUBMITTED' });
       }
       setShowOrderModal(false);
