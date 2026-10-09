@@ -173,7 +173,30 @@ alter table public.users add column if not exists usdt_address text;
 alter table public.users add column if not exists username text;
 alter table public.users add column if not exists username_lower text;
 alter table public.users add column if not exists is_admin boolean default false;
+alter table public.users add column if not exists "isAdmin" boolean default false;
 alter table public.users add column if not exists device_signature text;
+
+create or replace function public.sync_user_admin_columns()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new."isAdmin" is null then
+    new."isAdmin" = new.is_admin;
+  elsif new.is_admin is null then
+    new.is_admin = new."isAdmin";
+  elsif new."isAdmin" <> new.is_admin then
+    new.is_admin = new."isAdmin";
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_sync_user_admin_columns on public.users;
+create trigger trg_sync_user_admin_columns
+before insert or update on public.users
+for each row
+execute function public.sync_user_admin_columns();
 alter table public.users add column if not exists ip_hint text;
 alter table public.users add column if not exists fcm_token text;
 

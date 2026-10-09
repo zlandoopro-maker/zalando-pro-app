@@ -67,11 +67,11 @@ serve(async (req) => {
             // Increment user balance
             await supabaseAdmin.rpc('atomic_increment', {
               table_name: 'users',
-              row_id: tx.userId,
+              row_id: tx.user_id,
               increments: { balance: tx.amount }
             })
             
-            console.log(`Credited $${tx.amount} to user ${tx.userId}`)
+            console.log(`Credited $${tx.amount} to user ${tx.user_id}`)
           }
         }
       }
@@ -102,10 +102,10 @@ serve(async (req) => {
       const { data: newTx, error: txErr } = await supabaseAdmin
         .from('transactions')
         .insert([{
-          userId,
+          user_id: userId,
           amount,
           type: 'deposit',
-          paymentMethod: 'nowpayments',
+          payment_method: 'nowpayments',
           status: 'pending',
           timestamp: new Date().toISOString()
         }])

@@ -12,13 +12,16 @@
   --color-bg-base: #F5F3FF;
   --color-bg-soft: #F0EDFF;
   --color-bg-light: #F7F5FF;
+  --app-height: 100dvh;
 }
 
 @layer base {
   html {
     /* Prevent content jumping when keyboard opens */
+    width: 100%;
     height: 100%;
     height: -webkit-fill-available;
+    background: #F5F3FF;
   }
 
   body {
@@ -35,9 +38,17 @@
     /* Immediate touch response */
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
-    /* Use fill-available for perfect mobile height */
+    /* Use the real visible viewport height on mobile browsers */
+    min-height: var(--app-height);
     min-height: 100vh;
     min-height: -webkit-fill-available;
+    width: 100%;
+    margin: 0;
+  }
+
+  html, body, #root {
+    min-height: 100%;
+    width: 100%;
   }
 
   /* Global Instant Tap Response */

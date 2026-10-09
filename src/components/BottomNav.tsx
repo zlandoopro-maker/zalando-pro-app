@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Home, FileText, CircleUser } from 'lucide-react';
 import { Screen } from '../types';
 import { vibrateLight } from '../lib/haptics';
@@ -35,11 +35,14 @@ interface BottomNavProps {
 
 export default function BottomNav({ activeScreen, onNavigate }: BottomNavProps) {
   const [hasUnclaimed, setHasUnclaimed] = useState(false);
+  const [hasPendingOrders, setHasPendingOrders] = useState(false);
+  const intervalRef = useRef<number | null>(null);
 
   useEffect(() => {
     const check = () => {
-      if (!auth.currentUser) return;
+      if (!auth.currentUser || document.visibilityState === 'hidden') return;
       try {
+        // Check shipped orders (red badge)
         const cached = localStorage.getItem(`shipped_${auth.currentUser.uid}`);
         if (cached) {
           const parsed = JSON.parse(cached);
@@ -47,10 +50,47 @@ export default function BottomNav({ activeScreen, onNavigate }: BottomNavProps) 
           setHasUnclaimed(has);
         }
       } catch (e) {}
+
+      try {
+        // Check pending orders (yellow badge)
+        const ordersCache = localStorage.getItem(`user_orders_${auth.currentUser!.uid}`);
+        if (ordersCache) {
+          const parsed = JSON.parse(ordersCache);
+          const todayStr = new Date().toISOString().split('T')[0];
+          const hasPending = Array.isArray(parsed) && parsed.some(
+            (o: any) => o.status === 'Pending' && o.submittedAt && o.submittedAt.startsWith(todayStr)
+          );
+          setHasPendingOrders(hasPending);
+        } else {
+          setHasPendingOrders(false);
+        }
+      } catch (e) {}
     };
+
+    const startPolling = () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = window.setInterval(check, 4000);
+    };
+
     check();
-    const interval = setInterval(check, 2000);
-    return () => clearInterval(interval);
+    startPolling();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        check();
+        startPolling();
+      } else if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, []);
 
   const tabs = [
@@ -114,6 +154,11 @@ export default function BottomNav({ activeScreen, onNavigate }: BottomNavProps) 
               {tab.id === 'orders' && hasUnclaimed && (
                 <div className="absolute -top-2 -right-2 min-w-[18px] h-[18px] px-1 bg-[#FF3333] rounded-full border-2 border-[#5d67b8] flex items-center justify-center shadow-[0_2px_8px_rgba(255,51,51,0.6)] animate-bounce z-10">
                   <span className="text-[10px] font-black text-white leading-none pb-[1px]">1</span>
+                </div>
+              )}
+              {tab.id === 'orders' && !hasUnclaimed && hasPendingOrders && (
+                <div className="absolute -top-2 -right-2 min-w-[18px] h-[18px] px-1 bg-[#F59E0B] rounded-full border-2 border-[#5d67b8] flex items-center justify-center shadow-[0_2px_8px_rgba(245,158,11,0.7)] animate-pulse z-10">
+                  <span className="text-[10px] font-black text-white leading-none pb-[1px]">!</span>
                 </div>
               )}
             </div>

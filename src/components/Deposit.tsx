@@ -416,6 +416,7 @@ export default function Deposit({ onBack, onKyc, onNavigate }: DepositProps) {
       try {
         // Step 1: Insert pending transaction in Supabase
         let inserted;
+        let firestoreDocId: string | null = null;
         try {
           const res = await supabase
             .from('transactions')
@@ -437,6 +438,16 @@ export default function Deposit({ onBack, onKyc, onNavigate }: DepositProps) {
         
         if (!inserted) throw new Error('Failed to create transaction record');
         supabaseTransactionId = inserted.id;
+
+        try {
+          await supabase
+            .from('transactions')
+            .update({ order_id: supabaseTransactionId })
+            .eq('id', supabaseTransactionId);
+          notifyAdminOfRequest('deposit', amount);
+        } catch (e) {
+          console.warn('[Deposit] Sync for NOWPayments failed (non-critical):', e);
+        }
 
         // Step 2: Create NOWPayments invoice via Express backend
         let data;
@@ -506,31 +517,12 @@ export default function Deposit({ onBack, onKyc, onNavigate }: DepositProps) {
           timestamp: txTimestamp
         };
 
-        // Write to Firestore (Admin Panel reads from here)
-        let firestoreDocId: string | null = null;
+        // Write transaction to database (via compatibility layer - creates single record)
         try {
-          const docRef = await addDoc(collection(db, 'transactions'), txData);
-          firestoreDocId = docRef.id;
-          // Notify admin hub about new deposit
+          await addDoc(collection(db, 'transactions'), txData);
           notifyAdminOfRequest('deposit', amount);
         } catch (err) {
           handleFirestoreError(err, OperationType.CREATE, 'transactions');
-        }
-
-        // Also write to Supabase (Transaction History reads from here)
-        try {
-          await supabase.from('transactions').insert({
-            user_id: auth.currentUser.uid,
-            amount: amount,
-            status: 'pending',
-            type: 'deposit',
-            payment_method: method,
-            order_id: orderId.trim(),
-            firestore_id: firestoreDocId,
-            timestamp: txTimestamp
-          });
-        } catch (e) {
-          console.warn('[Deposit] Supabase sync failed (non-critical):', e);
         }
 
         showNotification(`Deposit request for $${amount} submitted! It will reflect in your balance after admin approval.`, { type: 'success', title: 'SUBMITTED' });
@@ -559,7 +551,8 @@ export default function Deposit({ onBack, onKyc, onNavigate }: DepositProps) {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       style={{ background: PAGE_BG, minHeight: '100%', display: 'flex', flexDirection: 'column',
-        fontFamily: "'Inter','Segoe UI',sans-serif", paddingBottom: 88 }}>
+        fontFamily: "'Inter','Segoe UI',sans-serif",
+        paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}>
 
       {/* ── HEADER ─────────────────────────────────────────────────────── */}
       <div style={{ background: '#fff', display: 'flex', alignItems: 'center',
@@ -599,7 +592,7 @@ export default function Deposit({ onBack, onKyc, onNavigate }: DepositProps) {
       <AnimatePresence mode="wait">
         {step === 'select' ? (
           <motion.div key="select" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-            style={{ flex: 1, overflowY: 'auto', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            style={{ flex: 1, overflow: 'visible', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
             {/* ── AMOUNT CARD ─────────────────────────────────────────────── */}
             <div style={{ background: '#fff', borderRadius: 16, padding: '24px 20px',
@@ -742,7 +735,7 @@ export default function Deposit({ onBack, onKyc, onNavigate }: DepositProps) {
           </motion.div>
         ) : (
           <motion.div key="payment" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}
-            style={{ flex: 1, overflowY: 'auto', padding: '24px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
+            style={{ flex: 1, overflow: 'visible', padding: '24px 16px 88px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24, paddingBottom: 'calc(88px + env(safe-area-inset-bottom, 0px))' }}>
 
             {/* Amount Section with a glowing badge */}
             <div style={{ textAlign: 'center', marginTop: 10, background: 'linear-gradient(180deg, rgba(91,91,214,0.06) 0%, transparent 100%)', width: '100%', borderRadius: 24, padding: '24px 10px 10px' }}>
@@ -850,10 +843,11 @@ export default function Deposit({ onBack, onKyc, onNavigate }: DepositProps) {
                   </div>
 
                   <button onClick={() => window.open(nowPaymentsData.invoice_url, '_self')}
-                    style={{ width: '100%', padding: '16px 0', borderRadius: 14,
+                    style={{ width: '100%', minHeight: 54, padding: '16px 14px', borderRadius: 14,
                       background: 'linear-gradient(90deg, #5B5BD6, #7C7CE0)', color: '#fff', border: 'none', cursor: 'pointer',
                       fontSize: 16, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1,
-                      boxShadow: '0 8px 20px rgba(91,91,214,0.4)', transition: 'transform 0.2s', position: 'relative', overflow: 'hidden' }}>
+                      boxShadow: '0 8px 20px rgba(91,91,214,0.4)', transition: 'transform 0.2s', position: 'relative', overflow: 'hidden',
+                      WebkitAppearance: 'none', appearance: 'none' }}>
                     <span style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0110 0v4"></path></svg>
                       Proceed to Checkout

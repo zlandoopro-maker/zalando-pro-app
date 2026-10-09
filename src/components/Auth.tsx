@@ -137,6 +137,11 @@ export default function Auth({ onSuccess }: AuthProps) {
     setLoading(true);
     setError('');
 
+    if (auth.currentUser) {
+      await auth.signOut();
+    }
+    localStorage.removeItem('zp_clock_strikes');
+
     // --- OPTIMIZED TIME CHECK: Await so clock tampering actually blocks login ---
     const isClockOk = await verifyClockIntegrity((msg) => setError(msg));
     if (!isClockOk) { setLoading(false); return; }
@@ -175,17 +180,31 @@ export default function Auth({ onSuccess }: AuthProps) {
         }
 
         const userCredential = await signInWithEmailAndPassword(auth, loginEmail, password);
+        const postLoginClockOk = await verifyClockIntegrity((msg) => setError(msg));
+        if (!postLoginClockOk) {
+          await auth.signOut();
+          setLoading(false);
+          return;
+        }
+
         const userDocRef = doc(db, 'users', userCredential.user.uid);
         try {
           const userDoc = await getDoc(userDocRef);
           if (userDoc.exists()) {
-            if (userDoc.data().isBlocked) {
+            const rawUserData = userDoc.data();
+            const isBlocked = Boolean(
+              rawUserData.is_blocked === true ||
+              rawUserData.isBlocked === true ||
+              String(rawUserData.block_reason ?? rawUserData.ban_reason ?? '').trim().length > 0
+            );
+
+            if (isBlocked) {
               await auth.signOut();
-              setError("Your account has been blocked by the admin.");
+              setError("Your account has been permanently blocked due to time tampering or a security violation.");
               setLoading(false);
               return;
             }
-            if (referralCodeInput.trim() && !userDoc.data().referredBy) {
+            if (referralCodeInput.trim() && !rawUserData.referredBy && !rawUserData.referred_by) {
               const referrerId = await processReferralIfAny(userCredential.user);
               if (referrerId) {
                 await updateDoc(userDocRef, { referredBy: referrerId });
@@ -237,6 +256,14 @@ export default function Auth({ onSuccess }: AuthProps) {
         // Flag to prevent App.tsx auto-healer from racing
         sessionStorage.setItem('is_registering', 'true');
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const postSignupClockOk = await verifyClockIntegrity((msg) => setError(msg));
+        if (!postSignupClockOk) {
+          await auth.signOut();
+          sessionStorage.removeItem('is_registering');
+          setLoading(false);
+          return;
+        }
+
         const user = userCredential.user;
 
         // Post-auth uniqueness verification (User is NOW AUTHENTICATED, so query is guaranteed allowed)
@@ -304,6 +331,17 @@ export default function Auth({ onSuccess }: AuthProps) {
     setLoading(true);
     setError('');
     try {
+      if (auth.currentUser) {
+        await auth.signOut();
+      }
+      localStorage.removeItem('zp_clock_strikes');
+
+      const isClockOk = await verifyClockIntegrity((msg) => setError(msg));
+      if (!isClockOk) {
+        setLoading(false);
+        return;
+      }
+
       let user;
       
       if (Capacitor.isNativePlatform()) {
@@ -316,6 +354,13 @@ export default function Auth({ onSuccess }: AuthProps) {
         await signInWithPopup(auth, googleProvider);
         user = auth.currentUser;
       }
+
+      const postLoginClockOk = await verifyClockIntegrity((msg) => setError(msg));
+      if (!postLoginClockOk) {
+        await auth.signOut();
+        setLoading(false);
+        return;
+      }
       
       const userDocPath = `users/${user.uid}`;
       const userDocRef = doc(db, 'users', user.uid);
@@ -327,11 +372,19 @@ export default function Auth({ onSuccess }: AuthProps) {
         handleFirestoreError(getErr, OperationType.GET, userDocPath);
       }
 
-      if (userDoc?.exists() && userDoc.data().isBlocked) {
-        await auth.signOut();
-        setError("Your account has been blocked by the admin.");
-        setLoading(false);
-        return;
+      if (userDoc?.exists()) {
+        const rawUserData = userDoc.data();
+        const isBlocked = Boolean(
+          rawUserData.is_blocked === true ||
+          rawUserData.isBlocked === true ||
+          String(rawUserData.block_reason ?? rawUserData.ban_reason ?? '').trim().length > 0
+        );
+        if (isBlocked) {
+          await auth.signOut();
+          setError("Your account has been permanently blocked due to time tampering or a security violation.");
+          setLoading(false);
+          return;
+        }
       }
 
       if (!userDoc?.exists()) {
@@ -387,6 +440,17 @@ export default function Auth({ onSuccess }: AuthProps) {
     setLoading(true);
     setError('');
     try {
+      if (auth.currentUser) {
+        await auth.signOut();
+      }
+      localStorage.removeItem('zp_clock_strikes');
+
+      const isClockOk = await verifyClockIntegrity((msg) => setError(msg));
+      if (!isClockOk) {
+        setLoading(false);
+        return;
+      }
+
       let user;
       try {
         const result = await signInAnonymously(auth);
@@ -403,6 +467,13 @@ export default function Auth({ onSuccess }: AuthProps) {
           throw anonErr;
         }
       }
+
+      const postLoginClockOk = await verifyClockIntegrity((msg) => setError(msg));
+      if (!postLoginClockOk) {
+        await auth.signOut();
+        setLoading(false);
+        return;
+      }
       
       const userDocPath = `users/${user.uid}`;
       const userDocRef = doc(db, 'users', user.uid);
@@ -414,11 +485,19 @@ export default function Auth({ onSuccess }: AuthProps) {
         handleFirestoreError(getErr, OperationType.GET, userDocPath);
       }
 
-      if (userDoc?.exists() && userDoc.data().isBlocked) {
-        await auth.signOut();
-        setError("Your account has been blocked by the admin.");
-        setLoading(false);
-        return;
+      if (userDoc?.exists()) {
+        const rawUserData = userDoc.data();
+        const isBlocked = Boolean(
+          rawUserData.is_blocked === true ||
+          rawUserData.isBlocked === true ||
+          String(rawUserData.block_reason ?? rawUserData.ban_reason ?? '').trim().length > 0
+        );
+        if (isBlocked) {
+          await auth.signOut();
+          setError("Your account has been permanently blocked due to time tampering or a security violation.");
+          setLoading(false);
+          return;
+        }
       }
 
       if (!userDoc?.exists()) {

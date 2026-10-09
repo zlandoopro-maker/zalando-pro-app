@@ -39,12 +39,14 @@ export function parseUserProfile(data: any): any {
     }
   }
 
+  const blockReason = String(data.block_reason ?? data.ban_reason ?? data.blockReason ?? data.banReason ?? '').trim();
+
   return {
     ...camelMapped,
     userId: data.user_id || data.userId || data.uid || data.id,
     uid: data.user_id || data.userId || data.uid || data.id,
     isAdmin: Boolean(data.is_admin ?? data.isAdmin ?? false),
-    isBlocked: Boolean(data.is_blocked ?? data.isBlocked ?? false),
+    isBlocked: Boolean(data.is_blocked === true || data.isBlocked === true || blockReason.length > 0),
     todayTeamEarnings: Number(data.today_team_earnings ?? data.todayTeamEarnings ?? 0),
     todayTaskEarnings: Number(data.today_task_earnings ?? data.todayTaskEarnings ?? 0),
     totalEarnings: Number(data.total_earnings ?? data.totalEarnings ?? 0),
@@ -558,4 +560,4 @@ export async function runTransaction(...args: any[]) {
   return result;
 }
 
-export { verifyClockIntegrity, startClockMonitor, stopClockMonitor, initClockBaseline } from './clockGuard';
+export { verifyClockIntegrity, startClockMonitor, stopClockMonitor, initClockBaseline, getReliableServerTime } from './clockGuard';

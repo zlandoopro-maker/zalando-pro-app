@@ -3,10 +3,11 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Package, Truck, Plane, MapPin, Navigation, CheckCircle2, DollarSign, Clock } from 'lucide-react';
 import { useNotification } from './NotificationProvider';
 import { Screen, TaskOrder } from '../types';
-import { auth, db } from '../lib/firebase';
-import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, increment, setDoc } from '../lib/firebase';
+import { auth, db, onSnapshot } from '../lib/firebase';
+import { collection, query, where, orderBy, doc, updateDoc, increment, setDoc } from '../lib/firebase';
 import { vibrateSuccess, vibrateLight } from '../lib/haptics';
 import { playGlassSound } from '../lib/audio';
+import { TIERS } from '../lib/tiers';
 
 interface OrderRecordProps {
   onNavigate: (screen: Screen) => void;
@@ -25,6 +26,8 @@ export default function OrderRecord({ onNavigate }: OrderRecordProps) {
   const [shippedOrders, setShippedOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submittingOrderId, setSubmittingOrderId] = useState<string | null>(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [showAllResoldModal, setShowAllResoldModal] = useState(false);
 
   // Handle submitting a pending order to claim commission
   const handleSubmitPending = async (order: TaskOrder) => {
@@ -72,7 +75,7 @@ export default function OrderRecord({ onNavigate }: OrderRecordProps) {
         console.warn("Balance update restricted, continuing with local update...", balanceErr);
       }
 
-      // Update order status - use setDoc with merge (more permissive than updateDoc)
+      // Update order status
       try {
         await setDoc(doc(db, 'users', userId, 'orders', order.id), {
           ...order,
@@ -87,7 +90,7 @@ export default function OrderRecord({ onNavigate }: OrderRecordProps) {
       // Always update local cache
       updateLocalCache();
 
-      // Force re-render by updating orders state directly
+      // Force re-render
       setOrders(prev => prev.map(o =>
         o.id === order.id ? { ...o, status: 'Successful' as const } : o
       ));
@@ -95,6 +98,35 @@ export default function OrderRecord({ onNavigate }: OrderRecordProps) {
       vibrateSuccess();
       playGlassSound();
       showNotification(`Commission $${commissionAmount.toFixed(2)} claimed!`, { type: 'success' });
+
+      // ── Check if this was the LAST task → trigger shipment ──────────────
+      const activePlanId = profile?.currentPlan || profile?.tier || profile?.activeTier || profile?.plan;
+      const currentTier = TIERS.find(t => t.id === activePlanId) ||
+        TIERS.find(t => t.name?.toLowerCase() === activePlanId?.toLowerCase()) || TIERS[0];
+      const userTaskLimit = profile?.taskLimit ?? profile?.dailyTasksLimit ?? currentTier.dailyTasks;
+      const tasksCompleted = profile?.tasksCompletedCount ?? 0;
+
+      // tasksCompleted already includes the cancelled task count; check if ALL tasks done
+      if (tasksCompleted >= userTaskLimit) {
+        const todayEarnings = (profile?.todayTaskEarnings || 0) + commissionAmount;
+        const shippedId = `shipped_${new Date().toISOString().split('T')[0]}`;
+        const shippedOrder = {
+          id: shippedId,
+          userId,
+          createdAt: new Date().toISOString(),
+          status: 'Shipped',
+          totalTasks: userTaskLimit,
+          claimAmount: todayEarnings,
+          claimed: false
+        };
+        try {
+          await setDoc(doc(db, 'users', userId, 'shippedOrders', shippedId), shippedOrder);
+          localStorage.setItem(`shipped_${userId}`, JSON.stringify([shippedOrder]));
+        } catch (e) {
+          localStorage.setItem(`shipped_${userId}`, JSON.stringify([shippedOrder]));
+        }
+        setTimeout(() => setShowAllResoldModal(true), 600);
+      }
     } catch (e: any) {
       console.error("Submit pending order error:", e);
       // Even on full failure, update local cache and UI
@@ -258,6 +290,15 @@ export default function OrderRecord({ onNavigate }: OrderRecordProps) {
     });
 
     return () => { unsub(); unsubShipped(); };
+  }, []);
+
+  // Load user profile for shipment trigger
+  useEffect(() => {
+    if (!auth.currentUser) return;
+    const unsub = onSnapshot(doc(db, 'users', auth.currentUser.uid), (snap) => {
+      if (snap.exists()) setProfile(snap.data());
+    });
+    return () => unsub();
   }, []);
 
   const copyOrderId = (orderId: string) => {
@@ -738,6 +779,60 @@ export default function OrderRecord({ onNavigate }: OrderRecordProps) {
           pointer-events: none;
         }
       `}</style>
+
+      {/* ══ Shipment Celebration Modal (triggered when last pending order is submitted) ══ */}
+      <AnimatePresence>
+        {showAllResoldModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 300,
+              background: 'rgba(0,0,0,0.75)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.8, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.8, y: 20 }}
+              style={{
+                width: '100%', maxWidth: 330, background: '#ffffff',
+                borderRadius: 20, padding: '28px 22px 24px',
+                textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.35)',
+                display: 'flex', flexDirection: 'column', alignItems: 'center',
+              }}
+            >
+              <div style={{
+                width: 64, height: 64, borderRadius: '50%',
+                background: 'linear-gradient(135deg, #FF6900, #FFA800)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 32, boxShadow: '0 8px 20px rgba(255,105,0,0.4)', marginBottom: 16,
+              }}>🎉</div>
+              <h3 style={{ fontSize: 20, fontWeight: 800, color: '#1a1a1a', margin: '0 0 10px 0', lineHeight: 1.3 }}>
+                Order Shipped!
+              </h3>
+              <p style={{ fontSize: 15, color: '#555', lineHeight: 1.5, margin: '0 0 22px 0', fontWeight: 500 }}>
+                All tasks complete! Your order has been Shipped. Track live delivery under Z-Status tab.
+              </p>
+              <button
+                onClick={() => { vibrateLight(); setShowAllResoldModal(false); setActiveTab('Z status'); }}
+                style={{
+                  width: '100%', padding: '14px 0',
+                  background: 'linear-gradient(90deg, #FF6900, #FF8500)',
+                  border: 'none', borderRadius: 12, color: '#fff',
+                  fontWeight: 700, fontSize: 16, cursor: 'pointer', letterSpacing: 0.3,
+                }}
+              >
+                Track Shipment →
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

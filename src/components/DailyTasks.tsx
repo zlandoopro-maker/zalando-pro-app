@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { auth, db, doc, onSnapshot, updateDoc, increment, collection, addDoc, setDoc, verifyClockIntegrity } from '../lib/firebase';
+import { auth, db, doc, onSnapshot, updateDoc, increment, collection, addDoc, setDoc, verifyClockIntegrity, getReliableServerTime, getDocs, query, where } from '../lib/firebase';
 import { useNotification } from './NotificationProvider';
 import { vibrateLight, vibrateSuccess } from '../lib/haptics';
 import { playGlassSound } from '../lib/audio';
@@ -317,8 +317,51 @@ export default function DailyTasks({ onBack }: DailyTasksProps) {
 
   const [showExceededLimit, setShowExceededLimit] = useState(false);
 
-  const handleSlotTap = () => {
+  const handleSlotTap = async () => {
     if (flowState !== 'idle') return;
+
+    // ── TIME TAMPERING CHECK (Instant Ban if detected) ──
+    const isClockOk = await verifyClockIntegrity(showNotification);
+    if (!isClockOk) return;
+
+    if (auth.currentUser?.uid) {
+      // 1. Quick local cache check
+      try {
+        const cacheKey = `user_orders_${auth.currentUser.uid}`;
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) {
+            const todayStr = formatNow().split(' ')[0];
+            const hasPending = parsed.some((o: any) => o.status === 'Pending' && o.submittedAt && o.submittedAt.startsWith(todayStr));
+            if (hasPending) {
+              vibrateLight();
+              showNotification('Please submit your pending order first!', { type: 'error' });
+              return;
+            }
+          }
+        }
+      } catch (e) {}
+
+      // 2. Fallback to Firestore check to be 100% sure
+      try {
+        const todayStr = formatNow().split(' ')[0];
+        const q = query(collection(db, 'users', auth.currentUser.uid, 'orders'), where('status', '==', 'Pending'));
+        const pendingSnap = await getDocs(q);
+        let hasPendingForToday = false;
+        for (const d of pendingSnap.docs ?? []) {
+          const data = d.data();
+          const subAt = data.submittedAt || data.submitted_at || data.created_at || '';
+          if (String(subAt).startsWith(todayStr)) hasPendingForToday = true;
+        }
+        
+        if (hasPendingForToday) {
+          vibrateLight();
+          showNotification('Please submit your pending order first!', { type: 'error' });
+          return;
+        }
+      } catch (e) {}
+    }
 
     // Check if task limit for today is reached
     const tasksCompleted = profile?.tasksCompletedCount ?? 0;
@@ -346,17 +389,27 @@ export default function DailyTasks({ onBack }: DailyTasksProps) {
 
   const [showSubmitSuccess, setShowSubmitSuccess] = useState(false);
   const [showAllResoldModal, setShowAllResoldModal] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false); // Blocks multiple cancel taps
   const isSubmittingRef = useRef(false); // Prevents duplicate submit on rapid taps
 
   const handleCancel = async () => {
+    // ── Duplicate-tap guard: React state ensures button is disabled immediately ──
+    if (isCancelling) return;
+    setIsCancelling(true);
+
     if (!auth.currentUser || !profile || !page3Data) {
       vibrateLight();
       setFlowState('idle');
       setShowSubmitSuccess(false);
+      setIsCancelling(false);
       return;
     }
 
     vibrateLight();
+
+    // ── Immediately close UI so user cannot tap again ──
+    setFlowState('idle');
+    setShowSubmitSuccess(false);
 
     // Task counts but NO commission is given
     const orderId = generateOrderId();
@@ -368,52 +421,55 @@ export default function DailyTasks({ onBack }: DailyTasksProps) {
       productImage: page3Data.product.img || '/red_jordan.png',
       orderTotal: page3Data.orderTotal || 0,
       commissionRate: userCommissionRate,
-      commissionAmount: page3Data.commission ?? 0, // Store original commission for later claim
-      pendingCommission: page3Data.commission ?? 0, // The commission user can claim by submitting from Pending tab
+      commissionAmount: page3Data.commission ?? 0,
+      pendingCommission: page3Data.commission ?? 0,
       estimatedRefund: (page3Data.orderTotal || 0) + (page3Data.commission ?? 0),
       submittedAt: formatNow(),
       status: 'Pending'
     };
 
+    // ── Update local cache immediately (instant UI) ──
+    const cacheKey = `user_orders_${auth.currentUser.uid}`;
     try {
-      // Only increment task count, do NOT add commission to balance yet
-      await updateDoc(doc(db, 'users', auth.currentUser.uid), {
-        tasksCompletedCount: increment(1),
-        updatedAt: new Date().toISOString()
-      });
+      const cached = localStorage.getItem(cacheKey);
+      let parsed = cached ? JSON.parse(cached) : [];
+      if (!Array.isArray(parsed)) parsed = [];
+      if (!parsed.some((o: any) => o.id === orderId)) {
+        parsed.unshift(pendingOrder);
+      }
+      localStorage.setItem(cacheKey, JSON.stringify(parsed));
+    } catch (e) {}
 
-      // Save order as Pending in Supabase / Firestore
-
-      await setDoc(doc(db, 'users', auth.currentUser.uid, 'orders', orderId), pendingOrder);
-
-      // Always update local cache so OrderRecord Pending tab shows it immediately
-      const cacheKey = `user_orders_${auth.currentUser.uid}`;
-      try {
-        const cached = localStorage.getItem(cacheKey);
-        let parsed = cached ? JSON.parse(cached) : [];
-        if (!Array.isArray(parsed)) parsed = [];
-        if (!parsed.some((o: any) => o.id === orderId)) {
-          parsed.unshift(pendingOrder);
-        }
-        localStorage.setItem(cacheKey, JSON.stringify(parsed));
-      } catch (e) {}
-    } catch (e: any) {
-      console.error("Cancel task error:", e);
+    const timeSafe = await verifyClockIntegrity(showNotification);
+    if (!timeSafe) {
+      setFlowState('idle');
+      setShowSubmitSuccess(false);
+      setIsCancelling(false);
+      return;
     }
 
-    setFlowState('idle');
-    setShowSubmitSuccess(false);
+    // ── DB writes happen in background ──
+    try {
+      const serverNow = (await getReliableServerTime()) || Date.now();
+      await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+        tasksCompletedCount: increment(1),
+        updatedAt: new Date(serverNow).toISOString()
+      });
+      await setDoc(doc(db, 'users', auth.currentUser.uid, 'orders', orderId), pendingOrder);
+    } catch (e: any) {
+      console.error("Cancel task error:", e);
+    } finally {
+      setIsCancelling(false);
+    }
   };
 
   const handleSubmit = async () => {
     // ── Duplicate-tap guard: bail immediately if already processing ──
     if (isSubmittingRef.current) return;
     isSubmittingRef.current = true;
-    
-    // Check clock integrity to prevent time manipulation (cheating daily resets)
-    const isClockOk = await verifyClockIntegrity(showNotification);
-    if (!isClockOk) {
-      setFlowState('idle');
+
+    const clockOk = await verifyClockIntegrity(showNotification);
+    if (!clockOk) {
       isSubmittingRef.current = false;
       return;
     }
@@ -426,6 +482,7 @@ export default function DailyTasks({ onBack }: DailyTasksProps) {
     if (tasksCompleted >= userTaskLimit) {
       showNotification('Daily task limit reached!', { type: 'error' });
       setFlowState('idle');
+      isSubmittingRef.current = false;
       return;
     }
     vibrateSuccess();
@@ -433,7 +490,20 @@ export default function DailyTasks({ onBack }: DailyTasksProps) {
     const commissionAmount = page3Data?.commission ?? 0.11;
     const isLastTask = (tasksCompleted + 1) >= userTaskLimit;
 
+    // ── Instantly close UI for snappy feel (DB writes happen below) ──
+    if (!isLastTask) {
+      setShowSubmitSuccess(true);
+      setTimeout(() => {
+        setShowSubmitSuccess(false);
+        setFlowState('idle');
+        isSubmittingRef.current = false;
+      }, 900);
+    }
+
     try {
+      const serverNow = (await getReliableServerTime()) || Date.now();
+      const serverNowIso = new Date(serverNow).toISOString();
+
       // Create order record in user's subcollection to bypass top-level security rules
       const orderId = generateOrderId();
       const newOrder = {
@@ -454,7 +524,7 @@ export default function DailyTasks({ onBack }: DailyTasksProps) {
         const updateData: any = {
           tasksCompletedCount: increment(1),
           todayTaskEarnings: increment(commissionAmount),
-          updatedAt: new Date().toISOString()
+          updatedAt: serverNowIso
         };
         await updateDoc(doc(db, 'users', auth.currentUser.uid), updateData);
 
@@ -507,20 +577,16 @@ export default function DailyTasks({ onBack }: DailyTasksProps) {
         }
         // Trigger celebratory popup for finishing all tasks of the plan
         setShowAllResoldModal(true);
-      } else {
-        // Show exact green success banner overlay on page 3
-        setShowSubmitSuccess(true);
-        setTimeout(() => {
-          setShowSubmitSuccess(false);
-          setFlowState('idle');
-          isSubmittingRef.current = false; // Reset lock after success
-        }, 1200);
+        isSubmittingRef.current = false;
       }
     } catch (e: any) {
       console.error("Submit task error:", e);
       showNotification(`Failed: ${e?.message || 'Unknown error'}`, { type: 'error' });
-      setFlowState('idle');
-      isSubmittingRef.current = false; // Allow retry after error
+      // Only reset if not already handled above (non-last task case)
+      if (isSubmittingRef.current) {
+        setFlowState('idle');
+        isSubmittingRef.current = false;
+      }
     }
   };
 
@@ -855,7 +921,17 @@ export default function DailyTasks({ onBack }: DailyTasksProps) {
               {/* ── Header with Zalando logo ── */}
               <div style={{ flexShrink: 0 }}>
                 <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-                  <button onClick={handleCancel} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 28, color: '#1a1a1a', lineHeight: 1, fontWeight: 300 }}>‹</button>
+                  <button 
+                    onClick={isCancelling ? undefined : handleCancel} 
+                    disabled={isCancelling}
+                    style={{ 
+                      position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', 
+                      background: 'none', border: 'none', 
+                      cursor: isCancelling ? 'not-allowed' : 'pointer', 
+                      padding: 0, fontSize: 28, color: '#1a1a1a', lineHeight: 1, fontWeight: 300,
+                      opacity: isCancelling ? 0.3 : 1,
+                      pointerEvents: isCancelling ? 'none' : 'auto',
+                    }}>‹</button>
                   <img src="/zalando_logo.png" alt="zalando" style={{ height: 60, objectFit: 'contain' }} />
                 </div>
                 {/* Orange gradient bar */}
@@ -925,7 +1001,20 @@ export default function DailyTasks({ onBack }: DailyTasksProps) {
 
               {/* ── Buttons ── */}
               <div style={{ padding: '14px 22px 22px', display: 'flex', gap: 16, flexShrink: 0 }}>
-                <button onClick={handleCancel} style={{ flex: 1, padding: '14px 0', background: '#FF6900', border: 'none', borderRadius: 6, color: '#fff', fontWeight: 700, fontSize: 17, cursor: 'pointer', letterSpacing: 0.3 }}>Cancel</button>
+                <button 
+                  onClick={isCancelling ? undefined : handleCancel} 
+                  disabled={isCancelling}
+                  style={{ 
+                    flex: 1, padding: '14px 0', 
+                    background: isCancelling ? '#ccc' : '#FF6900', 
+                    border: 'none', borderRadius: 6, color: '#fff', fontWeight: 700, fontSize: 17, 
+                    cursor: isCancelling ? 'not-allowed' : 'pointer', 
+                    letterSpacing: 0.3,
+                    opacity: isCancelling ? 0.5 : 1,
+                    pointerEvents: isCancelling ? 'none' : 'auto',
+                    transition: 'all 0.15s ease',
+                  }}
+                >{isCancelling ? 'Please wait...' : 'Cancel'}</button>
                 <button
                   onClick={handleSubmit}
                   disabled={isSubmittingRef.current}

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zalando-app-v2';
+const CACHE_NAME = 'zalando-app-v4';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -18,6 +18,12 @@ self.addEventListener('install', (event) => {
     })
   );
   self.skipWaiting();
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 // Activate: Cleanup old caches

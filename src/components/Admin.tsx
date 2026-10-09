@@ -7,6 +7,7 @@ import { doc, getDoc, onSnapshot, collection, query, getDocs, updateDoc, setDoc,
 import BottomNav from './BottomNav';
 import { useNotification } from './NotificationProvider';
 import { supabase } from '../lib/supabase';
+import { findMatchingSupabaseTransaction } from '../lib/transactionSync.js';
 
 export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void, key?: string }) {
   const { showNotification } = useNotification();
@@ -75,7 +76,9 @@ export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void,
       }
       const userRef = doc(db, 'users', auth.currentUser.uid);
       const userSnap = await getDoc(userRef);
-      if (!userSnap.exists() || !userSnap.data().isAdmin) {
+      const userData = userSnap.data() ?? {};
+      const isAdmin = Boolean(userData.isAdmin ?? userData.is_admin ?? false);
+      if (!userSnap.exists() || !isAdmin) {
         console.error("UNAUTHORIZED ACCESS ATTEMPT");
         auth.signOut();
         onNavigate('auth');
@@ -172,9 +175,13 @@ export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void,
         title: user.isAdmin ? 'REMOVE ADMIN' : 'MAKE ADMIN',
         onConfirm: async () => {
           const userRef = doc(db, 'users', user.userId);
+          const nextAdminState = !user.isAdmin;
           try {
-            await updateDoc(userRef, { isAdmin: !user.isAdmin });
-            showNotification(`${user.email} is now ${!user.isAdmin ? 'an Admin' : 'a regular user'}`, { type: 'success', title: 'ADMIN UPDATED' });
+            await updateDoc(userRef, {
+              isAdmin: nextAdminState,
+              is_admin: nextAdminState,
+            });
+            showNotification(`${user.email} is now ${nextAdminState ? 'an Admin' : 'a regular user'}`, { type: 'success', title: 'ADMIN UPDATED' });
           } catch (err) {
             handleFirestoreError(err, OperationType.UPDATE, `users/${user.userId}`);
           }
@@ -242,6 +249,40 @@ export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void,
     });
   };
 
+  const syncSupabaseTransactionStatus = async (tx: any, nextStatus: 'completed' | 'rejected' | 'failed', rejectionReason?: string) => {
+    try {
+      const userId = tx.userId || tx.user_id || '';
+      if (!userId) return false;
+
+      const patch: Record<string, any> = {
+        status: nextStatus,
+        updated_at: new Date().toISOString()
+      };
+      if (rejectionReason) patch.rejection_reason = rejectionReason;
+
+      if (tx.id) {
+        await supabase.from('transactions').update(patch).eq('id', tx.id);
+      }
+
+      const txAmount = Number(tx.amount || 0);
+      const txType = tx.type || 'deposit';
+      if (txAmount > 0) {
+        await supabase
+          .from('transactions')
+          .update(patch)
+          .eq('user_id', userId)
+          .eq('type', txType)
+          .eq('amount', txAmount)
+          .eq('status', 'pending');
+      }
+
+      return true;
+    } catch (e) {
+      console.warn('[Admin] Supabase status sync failed:', e);
+      return false;
+    }
+  };
+
   const handleApproveTransaction = async (tx: any) => {
     try {
       showNotification('Approving...', { type: 'info', title: 'PROCESSING' });
@@ -263,27 +304,7 @@ export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void,
         transaction.update(txRef, { status: 'completed', updatedAt: new Date().toISOString() });
       });
 
-      // Also sync to Supabase so Transaction History shows "Completed"
-      try {
-        // Try matching by firestore_id first, then by user_id + amount + status
-        const { data: matchedTxs } = await supabase
-          .from('transactions')
-          .select('id')
-          .eq('user_id', tx.userId)
-          .eq('type', tx.type || 'deposit')
-          .eq('status', 'pending')
-          .eq('amount', Number(tx.amount) || 0)
-          .limit(1);
-
-        if (matchedTxs && matchedTxs.length > 0) {
-          await supabase
-            .from('transactions')
-            .update({ status: 'completed' })
-            .eq('id', matchedTxs[0].id);
-        }
-      } catch (e) {
-        console.warn('[Admin] Supabase sync on approve failed (non-critical):', e);
-      }
+      await syncSupabaseTransactionStatus(tx, 'completed');
 
       setTransactions(transactions.filter(t => t.id !== tx.id));
       showNotification('Transaction Approved!', { type: 'success', title: 'APPROVED' });
@@ -321,26 +342,7 @@ export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void,
         });
       });
 
-      // Also sync rejection to Supabase
-      try {
-        const { data: matchedTxs } = await supabase
-          .from('transactions')
-          .select('id')
-          .eq('user_id', tx.userId)
-          .eq('type', tx.type || 'deposit')
-          .eq('status', 'pending')
-          .eq('amount', Number(tx.amount) || 0)
-          .limit(1);
-
-        if (matchedTxs && matchedTxs.length > 0) {
-          await supabase
-            .from('transactions')
-            .update({ status: 'rejected', rejection_reason: reason })
-            .eq('id', matchedTxs[0].id);
-        }
-      } catch (e) {
-        console.warn('[Admin] Supabase sync on reject failed (non-critical):', e);
-      }
+      await syncSupabaseTransactionStatus(tx, 'rejected', reason);
 
       setTransactions(transactions.filter(t => t.id !== tx.id));
       showNotification('Transaction Rejected!', { type: 'success', title: 'REJECTED' });

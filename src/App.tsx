@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, startTransition, lazy, Suspense } from 'react';
 import { AnimatePresence } from 'motion/react';
-import { auth, db, onAuthStateChanged, doc, onSnapshot, updateDoc, setDoc, getDoc, parseUserProfile, startClockMonitor, stopClockMonitor, initClockBaseline } from './lib/firebase';
+import { auth, db, onAuthStateChanged, doc, onSnapshot, updateDoc, setDoc, getDoc, parseUserProfile, startClockMonitor, stopClockMonitor, initClockBaseline, getReliableServerTime } from './lib/firebase';
 import { Screen } from './types';
 import { registerPushNotifications } from './lib/notificationSystem';
 import { vibrateLight } from './lib/haptics';
@@ -71,9 +71,11 @@ export default function App() {
     return sessionStorage.getItem('appState_selectedPlanId') || 'trainee';
   });
   const [lastBackPress, setLastBackPress] = useState(0);
+  const lastBackPressRef = useRef(0);
   // Ref to track current screen inside effects without adding it as a dependency
   const screenRef = useRef<Screen>(screen);
   useEffect(() => { screenRef.current = screen; }, [screen]);
+  useEffect(() => { lastBackPressRef.current = lastBackPress; }, [lastBackPress]);
 
   const navigate = (s: Screen, replace = false) => {
     vibrateLight();
@@ -141,11 +143,12 @@ export default function App() {
 
     const handleBackAction = () => {
       const rootScreens = ['home', 'intro1', 'auth', 'welcome'];
-      if (rootScreens.includes(screen)) {
+      if (rootScreens.includes(screenRef.current)) {
         const now = Date.now();
-        if (now - lastBackPress < 2000) {
+        if (now - lastBackPressRef.current < 2000) {
           CapApp.exitApp();
         } else {
+          lastBackPressRef.current = now;
           setLastBackPress(now);
           showNotification("Press back again to exit", { type: 'info', title: 'EXIT' });
           vibrateLight();
@@ -182,15 +185,15 @@ export default function App() {
       }
     };
 
-    document.addEventListener('touchstart', handleTouchStart);
-    document.addEventListener('touchend', handleTouchEnd);
+    document.addEventListener('touchstart', handleTouchStart, { passive: true });
+    document.addEventListener('touchend', handleTouchEnd, { passive: true });
 
     return () => {
       backListener.then(l => l.remove());
       document.removeEventListener('touchstart', handleTouchStart);
       document.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [screen, lastBackPress]);
+  }, []);
 
   // Handle Automatic Dark Mode — only when user has NOT set a manual preference
   useEffect(() => {
@@ -300,29 +303,59 @@ export default function App() {
       if (u) {
         // Listen to global profile
         profileUnsub = onSnapshot(doc(db, 'users', u.uid), (docSnap) => {
+          if (sessionStorage.getItem('is_registering') === 'true') {
+            setUser(u);
+            setInitializing(false);
+            return;
+          }
+
           if (docSnap.exists()) {
             const rawData = docSnap.data();
             const data = parseUserProfile(rawData);
+            const blockReason = String(rawData.block_reason ?? rawData.ban_reason ?? '').trim();
+            const isAutoTimeBan = blockReason.includes('[AUTO] Time Tampering');
 
-            if (data.isBlocked) {
-              showNotification("Your account has been blocked by the admin.", { type: 'error', title: 'ACCOUNT BLOCKED' });
+            if (isAutoTimeBan) {
+              updateDoc(doc(db, 'users', u.uid), {
+                isBlocked: false,
+                is_blocked: false,
+                block_reason: null,
+                ban_reason: null,
+                updatedAt: new Date().toISOString()
+              }).catch(() => {});
+            }
+
+            const serverBlocked = !isAutoTimeBan && Boolean(
+              rawData.is_blocked === true ||
+              rawData.isBlocked === true ||
+              blockReason.length > 0 ||
+              data?.isBlocked === true
+            );
+
+            if (serverBlocked) {
+              showNotification("Your account has been permanently blocked due to time tampering or a security violation.", { type: 'error', title: 'ACCOUNT BLOCKED' });
               auth.signOut();
               setUser(null);
             } else {
-              // Daily Reset Check (Earnings & Tasks)
+              // Daily Reset Check (Earnings & Tasks) — always validate using server time, never local device time.
               const now = new Date();
-              const todayStr = now.toISOString().split('T')[0];
               const lastUpdateStr = data.updatedAt ? data.updatedAt.split('T')[0] : '';
 
-              if (lastUpdateStr && lastUpdateStr !== todayStr) {
-                // It's a new day! Reset today's stats
-                updateDoc(doc(db, 'users', u.uid), {
-                  todayTaskEarnings: 0,
-                  todayTeamEarnings: 0,
-                  tasksCompletedCount: 0,
-                  updatedAt: now.toISOString()
-                }).catch(e => console.error("Daily reset failed:", e));
-              }
+              getReliableServerTime().then((serverTime) => {
+                const verifiedNow = serverTime ? new Date(serverTime) : now;
+                const verifiedTodayStr = verifiedNow.toISOString().split('T')[0];
+
+                if (lastUpdateStr && lastUpdateStr !== verifiedTodayStr) {
+                  updateDoc(doc(db, 'users', u.uid), {
+                    todayTaskEarnings: 0,
+                    todayTeamEarnings: 0,
+                    tasksCompletedCount: 0,
+                    updatedAt: verifiedNow.toISOString()
+                  }).catch(e => console.error("Daily reset failed:", e));
+                } else if (lastUpdateStr && lastUpdateStr === verifiedTodayStr) {
+                  console.log('Daily tasks remain valid for server date; local device drift is ignored.');
+                }
+              });
 
               // 90-Day Plan Expiry Check
               if (data.currentPlan && data.currentPlan !== 'none' && data.planExpiry) {
@@ -392,6 +425,22 @@ export default function App() {
   }, []); // ✅ Empty deps — auth listener mounts once, uses screenRef for current screen
 
   useEffect(() => {
+    const updateViewportHeight = () => {
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight ?? 800;
+      document.documentElement.style.setProperty('--app-height', `${viewportHeight}px`);
+    };
+
+    updateViewportHeight();
+    window.addEventListener('resize', updateViewportHeight);
+    window.visualViewport?.addEventListener('resize', updateViewportHeight);
+
+    return () => {
+      window.removeEventListener('resize', updateViewportHeight);
+      window.visualViewport?.removeEventListener('resize', updateViewportHeight);
+    };
+  }, []);
+
+  useEffect(() => {
     sessionStorage.setItem('appState_screen', screen);
   }, [screen]);
 
@@ -427,20 +476,30 @@ export default function App() {
 
   const navScreens: Screen[] = ['home', 'orders', 'referrals', 'account', 'deposit', 'withdrawal'];
   const showNav = navScreens.includes(screen);
+  const fixedHeightScreens: Screen[] = ['orders', 'tasks', 'plan-detail'];
+  const scrollableMobileScreens: Screen[] = ['deposit', 'withdrawal'];
 
   // Wrapping AnimatePresence with Suspense provides the cleanest result.
   return (
-    <div className="w-full h-full min-h-[100dvh] bg-[#F5F3FF] dark:bg-[#0B0C10] flex flex-col justify-center items-center overflow-hidden">
+    <div
+      className="w-full flex items-center justify-center bg-[#F5F3FF] dark:bg-[#0B0C10] overflow-hidden"
+      style={{
+        minHeight: 'var(--app-height, 100dvh)',
+        height: 'var(--app-height, 100dvh)'
+      }}
+    >
       <div
-        className={`w-full h-full min-h-[100dvh] md:min-h-0 md:h-[min(100dvh-2rem,920px)] md:max-w-[430px] md:my-auto md:rounded-[40px] md:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.4)] md:border md:border-slate-200 dark:md:border-slate-800/80 bg-[#F5F3FF] dark:bg-[#0B0C10] transition-colors duration-300 flex flex-col relative overflow-hidden ${['orders', 'deposit', 'withdrawal', 'tasks', 'plan-detail'].includes(screen) ? 'overflow-hidden' : ''
+        className={`w-full h-full min-h-[var(--app-height)] md:min-h-0 md:h-[calc(var(--app-height)-2rem)] md:max-w-[430px] md:my-auto md:rounded-[40px] md:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.4)] md:border md:border-slate-200 dark:md:border-slate-800/80 bg-[#F5F3FF] dark:bg-[#0B0C10] transition-colors duration-300 flex flex-col relative overflow-hidden ${fixedHeightScreens.includes(screen) ? 'overflow-hidden' : ''
           }`}
         style={{
+          minHeight: 'var(--app-height, 100dvh)',
+          height: 'var(--app-height, 100dvh)',
           paddingTop: 'env(safe-area-inset-top, 0px)',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
           WebkitOverflowScrolling: 'touch'
         }}
       >
-        <main className={`w-full flex-1 flex flex-col ${['orders', 'deposit', 'withdrawal', 'tasks', 'plan-detail'].includes(screen) ? 'h-full overflow-hidden' : 'overflow-y-auto scroll-container shrink-0 min-h-full pb-[68px]'
+        <main className={`w-full flex-1 flex flex-col ${fixedHeightScreens.includes(screen) ? 'h-full overflow-hidden' : scrollableMobileScreens.includes(screen) ? 'overflow-y-auto scroll-container min-h-0' : 'overflow-y-auto scroll-container shrink-0 min-h-full pb-[68px]'
           }`}>
           <Suspense fallback={<ScreenFallback />}>
             <AnimatePresence mode="wait">
