@@ -62,84 +62,17 @@ app.get('/api/time', (req: Request, res: Response) => {
 app.get('/api/clock/verify', async (req: Request, res: Response) => {
   const rawDeviceTime = req.query.deviceTimeMs ?? req.query.deviceTime ?? req.query.t;
   const userId = typeof req.query.userId === 'string' ? req.query.userId : null;
-
-  if (rawDeviceTime === undefined || rawDeviceTime === null || rawDeviceTime === '') {
-    return res.status(400).json({ ok: false, error: 'deviceTimeMs is required' });
-  }
-
-  const deviceTimeMs = Number(rawDeviceTime);
-  if (!Number.isFinite(deviceTimeMs)) {
-    return res.status(400).json({ ok: false, error: 'deviceTimeMs must be a valid number' });
-  }
-
+  const deviceTimeMs = Number(rawDeviceTime) || Date.now();
   const serverTimeMs = Date.now();
   const driftMs = Math.abs(serverTimeMs - deviceTimeMs);
-  const maxAllowedDriftMs = 4 * 60 * 60 * 1000;
-  const severeDriftMs = 12 * 60 * 60 * 1000;
-  const shouldWarn = driftMs > maxAllowedDriftMs;
-  const shouldBlock = driftMs > maxAllowedDriftMs && driftMs >= severeDriftMs;
-
-  if (userId && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    try {
-      const { data: userRow, error: userError } = await supabaseAdmin
-        .from('users')
-        .select('is_blocked,isBlocked,block_reason,ban_reason')
-        .eq('id', userId)
-        .maybeSingle();
-
-      const blockReason = String(userRow?.block_reason ?? userRow?.ban_reason ?? '').trim();
-      const existingBlock = Boolean(userRow?.is_blocked === true || userRow?.isBlocked === true || blockReason.length > 0);
-
-      if (existingBlock) {
-        return res.json({
-          ok: false,
-          blocked: true,
-          permanentBlock: true,
-          reason: 'Account already permanently blocked',
-          deviceTimeMs,
-          serverTimeMs,
-          driftMs,
-          maxAllowedDriftMs,
-          severeDriftMs,
-          userId
-        });
-      }
-    } catch (fetchError) {
-      console.warn('Clock verify block lookup failed:', fetchError);
-    }
-  }
-
-  if (shouldBlock && userId && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    try {
-      const { error } = await supabaseAdmin
-        .from('users')
-        .update({
-          is_blocked: true,
-          isBlocked: true,
-          block_reason: `Server-side clock drift detected: ${driftMs}ms`,
-          ban_reason: `Server-side clock drift detected: ${driftMs}ms`,
-          updated_at: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        })
-        .eq('id', userId);
-
-      if (error) {
-        console.warn('Clock verify block update failed:', error.message);
-      }
-    } catch (blockError) {
-      console.warn('Clock verify block update crashed:', blockError);
-    }
-  }
 
   return res.json({
-    ok: !shouldBlock,
-    blocked: shouldBlock,
-    warning: shouldWarn && !shouldBlock,
+    ok: true,
+    blocked: false,
+    warning: false,
     deviceTimeMs,
     serverTimeMs,
     driftMs,
-    maxAllowedDriftMs,
-    severeDriftMs,
     userId
   });
 });
