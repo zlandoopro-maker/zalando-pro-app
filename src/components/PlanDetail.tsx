@@ -160,12 +160,17 @@ export default function PlanDetail({ planId, onBack, onDeposit }: PlanDetailProp
           distribute(l3Snap, l3Ref, 0.02); // Level 3
 
           // 4. Update Referral Record atomically
-          if (referralRef && referralSnap && referralSnap.exists()) {
-            transaction.update(referralRef, {
+          if (referralRef) {
+            transaction.set(referralRef, {
+              referrerId: userData.referredBy || null,
+              inviteeId: auth.currentUser!.uid,
+              inviteeName: userData.displayName || userData.username || userData.email || 'Partner',
               planType: plan.name,
               status: 'active',
-              commissionEarned: totalCommissionEarned
-            });
+              commissionEarned: totalCommissionEarned,
+              commissionType: 'referral_bonus',
+              timestamp: new Date().toISOString()
+            }, { merge: true });
           }
         });
       }

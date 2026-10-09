@@ -529,8 +529,46 @@ export default function DailyTasks({ onBack }: DailyTasksProps) {
         await updateDoc(doc(db, 'users', auth.currentUser.uid), updateData);
 
         // Write to subcollection (safer permission-wise)
-
         await setDoc(doc(db, 'users', auth.currentUser.uid, 'orders', orderId), newOrder);
+
+        // --- DISTRIBUTE 10% TASK REBATE TO REFERRER ---
+        if (profile?.referredBy && commissionAmount > 0) {
+          try {
+            const taskRebate = Math.round((commissionAmount * 0.10) * 100) / 100;
+            if (taskRebate > 0) {
+              const refUserRef = doc(db, 'users', profile.referredBy);
+              await updateDoc(refUserRef, {
+                balance: increment(taskRebate),
+                totalEarnings: increment(taskRebate),
+                todayTeamEarnings: increment(taskRebate),
+                updatedAt: serverNowIso
+              });
+
+              await addDoc(collection(db, 'transactions'), {
+                userId: profile.referredBy,
+                type: 'commission',
+                amount: taskRebate,
+                status: 'completed',
+                timestamp: new Date().toISOString(),
+                fromUser: auth.currentUser.uid,
+                note: 'Team Task Commission Rebate (10%)'
+              });
+
+              await addDoc(collection(db, 'referrals'), {
+                referrerId: profile.referredBy,
+                inviteeId: auth.currentUser.uid,
+                inviteeName: profile.displayName || profile.username || profile.email || 'Team Member',
+                planType: profile.currentPlan || 'Active',
+                commissionEarned: taskRebate,
+                commissionType: 'task_commission',
+                timestamp: new Date().toISOString(),
+                status: 'active'
+              });
+            }
+          } catch (refErr) {
+            console.warn("Failed to pay task rebate to referrer:", refErr);
+          }
+        }
 
         // Always update local cache so OrderRecord loads immediately
         const cacheKey = `user_orders_${auth.currentUser.uid}`;

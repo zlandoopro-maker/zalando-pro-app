@@ -29,62 +29,82 @@ export default function Auth({ onSuccess }: AuthProps) {
 
 
   const processReferralIfAny = async (user: any) => {
-    let referrerId = null;
+    let referrerId: string | null = null;
     let codeToUse = referralCodeInput.trim().toUpperCase();
     
     // Fallback to localStorage if manual input is empty
     if (!codeToUse) {
-      codeToUse = localStorage.getItem('referral_code') || '';
-    }
-
-    // --- AUTOMATIC REFERRAL FALLBACK ---
-    // If the user has no link, automatically assign them to the master admin.
-    if (!codeToUse) {
-      // REPLACE "MASTER" WITH YOUR ACTUAL ADMIN REFERRAL CODE!
-      codeToUse = 'MASTER'; 
+      codeToUse = (localStorage.getItem('referral_code') || '').trim().toUpperCase();
     }
 
     if (codeToUse.length > 0) {
       try {
+        // 1. Try referral_codes table
         const codeDoc = await getDoc(doc(db, 'referral_codes', codeToUse));
         if (codeDoc.exists()) {
-          referrerId = codeDoc.data().userId;
+          referrerId = codeDoc.data().userId || null;
+        }
+
+        // 2. Try users table by referralCode
+        if (!referrerId) {
+          const qCode = query(collection(db, 'users'), where('referralCode', '==', codeToUse));
+          const snapCode = await getDocs(qCode);
+          if (!snapCode.empty) {
+            referrerId = snapCode.docs[0].id;
+          }
+        }
+
+        // 3. Try users table by UID
+        if (!referrerId) {
+          const userByIdDoc = await getDoc(doc(db, 'users', codeToUse));
+          if (userByIdDoc.exists()) {
+            referrerId = userByIdDoc.id;
+          }
+        }
+
+        // Anti-Fraud: Block self-referral
+        if (referrerId === user.uid) {
+          console.warn("Self-referral blocked");
+          referrerId = null;
+        }
+
+        if (referrerId) {
+          let l2ReferrerId = null;
+          let l3ReferrerId = null;
           
-          // Anti-Fraud: Block self-referral
-          if (referrerId === user.uid) {
-            console.warn("Self-referral blocked");
-            return null;
-          }
-
-          if (referrerId) {
-            let l2ReferrerId = null;
-            let l3ReferrerId = null;
-            
-            try {
-              const parentRefSnap = await getDoc(doc(db, 'referrals', referrerId));
-              if (parentRefSnap.exists()) {
-                const parentData = parentRefSnap.data();
-                l2ReferrerId = parentData.referrerId || null;
-                l3ReferrerId = parentData.l2ReferrerId || null;
+          try {
+            const parentRefSnap = await getDoc(doc(db, 'referrals', referrerId));
+            if (parentRefSnap.exists()) {
+              const parentData = parentRefSnap.data();
+              l2ReferrerId = parentData.referrerId || null;
+              l3ReferrerId = parentData.l2ReferrerId || null;
+            } else {
+              // Check user document for referredBy
+              const parentUserSnap = await getDoc(doc(db, 'users', referrerId));
+              if (parentUserSnap.exists()) {
+                const parentUserData = parentUserSnap.data();
+                l2ReferrerId = parentUserData.referredBy || null;
               }
-            } catch (err) {
-              console.error("Failed to fetch L2/L3 referrers", err);
             }
-
-            await setDoc(doc(db, 'referrals', user.uid), {
-               referrerId,
-               l2ReferrerId,
-               l3ReferrerId,
-               inviteeId: user.uid,
-               inviteeName: user.displayName || user.email || 'Partner',
-               planType: 'None',
-               commissionEarned: 0,
-               timestamp: new Date().toISOString(),
-               status: 'pending' // New status for funnel tracking
-            });
-            // Clear used code
-            localStorage.removeItem('referral_code');
+          } catch (err) {
+            console.error("Failed to fetch L2/L3 referrers", err);
           }
+
+          const inviteeName = user.displayName || user.username || user.email || 'Partner';
+          await setDoc(doc(db, 'referrals', user.uid), {
+             referrerId,
+             l2ReferrerId,
+             l3ReferrerId,
+             inviteeId: user.uid,
+             inviteeName,
+             planType: 'None',
+             commissionEarned: 0,
+             commissionType: 'referral_bonus',
+             timestamp: new Date().toISOString(),
+             status: 'pending'
+          });
+          // Clear used code
+          localStorage.removeItem('referral_code');
         }
       } catch (err) {
         console.error("Failed to process referral code:", err);
