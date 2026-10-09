@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Loader2, X, FileText, Copy, Check, QrCode } from 'lucide-react';
 import { auth, db, handleFirestoreError, OperationType, parseUserProfile } from '../lib/firebase';
-import { doc, getDoc, collection, addDoc, onSnapshot } from '../lib/firebase';
+import { doc, getDoc, setDoc, collection, addDoc, onSnapshot } from '../lib/firebase';
 import { supabase } from '../lib/supabase';
 import { Screen, UserProfile } from '../types';
 import { startHumming } from '../lib/haptics';
@@ -444,6 +444,19 @@ export default function Deposit({ onBack, onKyc, onNavigate }: DepositProps) {
             .from('transactions')
             .update({ order_id: supabaseTransactionId })
             .eq('id', supabaseTransactionId);
+          
+          // Also create Firestore document so pending deposit appears in Admin Panel Pending Txs tab
+          await setDoc(doc(db, 'transactions', supabaseTransactionId), {
+            id: supabaseTransactionId,
+            userId: auth.currentUser.uid,
+            amount: amount,
+            status: 'pending',
+            type: 'deposit',
+            paymentMethod: 'nowpayments',
+            orderId: supabaseTransactionId,
+            timestamp: new Date().toISOString()
+          });
+
           notifyAdminOfRequest('deposit', amount);
         } catch (e) {
           console.warn('[Deposit] Sync for NOWPayments failed (non-critical):', e);

@@ -41,8 +41,36 @@ export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void,
     });
 
     const qTx = query(collection(db, 'transactions'), where('status', '==', 'pending'));
-    const unsubTx = onSnapshot(qTx, (snapshot) => {
-      setTransactions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    const unsubTx = onSnapshot(qTx, async (snapshot) => {
+      const fsTx = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      // Also fetch pending from Supabase
+      try {
+        const { data: supData } = await supabase.from('transactions').select('*').eq('status', 'pending');
+        if (supData && supData.length > 0) {
+          const map = new Map<string, any>();
+          fsTx.forEach(t => map.set(t.id, t));
+          supData.forEach(d => {
+            const txObj = {
+              id: d.id,
+              userId: d.user_id,
+              amount: Number(d.amount) || 0,
+              status: d.status,
+              type: d.type,
+              paymentMethod: d.payment_method || 'deposit',
+              orderId: d.order_id || d.id,
+              timestamp: d.timestamp || d.created_at,
+              userUsdtAddress: d.user_usdt_address || ''
+            };
+            if (!map.has(txObj.id)) map.set(txObj.id, txObj);
+          });
+          setTransactions(Array.from(map.values()));
+          return;
+        }
+      } catch (e) {
+        console.warn("[Admin] Supabase pending tx fetch warning:", e);
+      }
+      setTransactions(fsTx);
     }, (err) => {
       console.error("Admin tx snapshot error:", err);
     });
@@ -264,6 +292,12 @@ export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void,
         await supabase.from('transactions').update(patch).eq('id', tx.id);
       }
 
+      if (tx.orderId || tx.order_id) {
+        const orderIdToMatch = tx.orderId || tx.order_id;
+        await supabase.from('transactions').update(patch).eq('order_id', orderIdToMatch);
+        await supabase.from('transactions').update(patch).eq('id', orderIdToMatch);
+      }
+
       const txAmount = Number(tx.amount || 0);
       const txType = tx.type || 'deposit';
       if (txAmount > 0) {
@@ -285,29 +319,45 @@ export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void,
 
   const handleApproveTransaction = async (tx: any) => {
     try {
-      showNotification('Approving...', { type: 'info', title: 'PROCESSING' });
-      
-      await runTransaction(db, async (transaction) => {
-        const txRef = doc(db, 'transactions', tx.id);
-        const userRef = doc(db, 'users', tx.userId);
-        
-        const txSnap = await transaction.get(txRef);
-        if (!txSnap.exists()) throw new Error("Transaction not found");
-        if (txSnap.data().status !== 'pending') throw new Error("Transaction already processed");
+      showNotification('Approving deposit...', { type: 'info', title: 'PROCESSING' });
+      const txUserId = tx.userId || tx.user_id;
+      const txAmount = Number(tx.amount) || 0;
 
-        if (tx.type === 'deposit') {
-          transaction.update(userRef, {
-            balance: increment(Number(tx.amount) || 0)
-          });
+      if (!txUserId) throw new Error("User ID missing from transaction");
+
+      // 1. Credit User Balance in Firestore
+      if (txAmount > 0 && tx.type === 'deposit') {
+        const userRef = doc(db, 'users', txUserId);
+        await updateDoc(userRef, {
+          balance: increment(txAmount)
+        });
+      }
+
+      // 2. Update Firestore transaction status to completed
+      if (tx.id) {
+        try {
+          const txRef = doc(db, 'transactions', tx.id);
+          await updateDoc(txRef, { status: 'completed', updatedAt: new Date().toISOString() });
+        } catch (fErr) {
+          await setDoc(doc(db, 'transactions', tx.id), {
+            id: tx.id,
+            userId: txUserId,
+            amount: txAmount,
+            status: 'completed',
+            type: tx.type || 'deposit',
+            paymentMethod: tx.paymentMethod || 'deposit',
+            orderId: tx.orderId || tx.id,
+            timestamp: tx.timestamp || new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }, { merge: true });
         }
-        
-        transaction.update(txRef, { status: 'completed', updatedAt: new Date().toISOString() });
-      });
+      }
 
+      // 3. Update Supabase transaction status to completed (triggers realtime update in user history)
       await syncSupabaseTransactionStatus(tx, 'completed');
 
-      setTransactions(transactions.filter(t => t.id !== tx.id));
-      showNotification('Transaction Approved!', { type: 'success', title: 'APPROVED' });
+      setTransactions(prev => prev.filter(t => t.id !== tx.id));
+      showNotification(`Deposit of $${txAmount} approved! Balance credited and status updated to Completed.`, { type: 'success', title: 'APPROVED' });
     } catch (err: any) {
       console.error(err);
       showNotification(err.message || 'Failed to approve.', { type: 'error', title: 'FAILED' });
@@ -316,35 +366,48 @@ export default function Admin({ onNavigate }: { onNavigate: (s: Screen) => void,
 
   const handleRejectTransaction = async (tx: any) => {
     try {
-      const reason = prompt('Enter rejection reason:');
+      const reason = prompt('Enter rejection reason:') || 'Rejected by Admin';
       if (reason === null) return;
       
       showNotification('Rejecting...', { type: 'info', title: 'PROCESSING' });
-      
-      await runTransaction(db, async (transaction) => {
-        const txRef = doc(db, 'transactions', tx.id);
-        const userRef = doc(db, 'users', tx.userId);
-        
-        const txSnap = await transaction.get(txRef);
-        if (!txSnap.exists()) throw new Error("Transaction not found");
-        if (txSnap.data().status !== 'pending') throw new Error("Transaction already processed");
+      const txUserId = tx.userId || tx.user_id;
+      const txAmount = Number(tx.amount) || 0;
 
-        if (tx.type === 'withdrawal') {
-          transaction.update(userRef, {
-            balance: increment(Number(tx.deductedAmount || tx.amount) || 0)
-          });
-        }
-        
-        transaction.update(txRef, { 
-          status: 'rejected', 
-          rejectionReason: reason,
-          updatedAt: new Date().toISOString() 
+      // Refund withdrawal amount if rejecting withdrawal
+      if (tx.type === 'withdrawal' && txUserId && txAmount > 0) {
+        const userRef = doc(db, 'users', txUserId);
+        const refundAmt = Number(tx.deductedAmount || txAmount) || txAmount;
+        await updateDoc(userRef, {
+          balance: increment(refundAmt)
         });
-      });
+      }
+
+      if (tx.id) {
+        try {
+          const txRef = doc(db, 'transactions', tx.id);
+          await updateDoc(txRef, { 
+            status: 'rejected', 
+            rejectionReason: reason,
+            updatedAt: new Date().toISOString() 
+          });
+        } catch (fErr) {
+          await setDoc(doc(db, 'transactions', tx.id), {
+            id: tx.id,
+            userId: txUserId,
+            amount: txAmount,
+            status: 'rejected',
+            rejectionReason: reason,
+            type: tx.type || 'deposit',
+            paymentMethod: tx.paymentMethod || 'deposit',
+            timestamp: tx.timestamp || new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          }, { merge: true });
+        }
+      }
 
       await syncSupabaseTransactionStatus(tx, 'rejected', reason);
 
-      setTransactions(transactions.filter(t => t.id !== tx.id));
+      setTransactions(prev => prev.filter(t => t.id !== tx.id));
       showNotification('Transaction Rejected!', { type: 'success', title: 'REJECTED' });
     } catch (err: any) {
       console.error(err);
